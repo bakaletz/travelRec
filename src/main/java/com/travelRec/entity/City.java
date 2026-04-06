@@ -66,12 +66,6 @@ public class City {
     private Float baseShoppingScore;
 
     @Column(nullable = false)
-    private Float basePublicTransport;
-
-    @Column(nullable = false)
-    private Float baseWalkability;
-
-    @Column(nullable = false)
     private Float costLevel;
 
     @Column(nullable = false)
@@ -97,6 +91,12 @@ public class City {
 
     @Column(nullable = false)
     private Float shoppingScore;
+
+    @Column(nullable = false)
+    private Float publicTransportScore;
+
+    @Column(nullable = false)
+    private Float walkabilityScore;
 
     @Column(nullable = false)
     private Float popularity;

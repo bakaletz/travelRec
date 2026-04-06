@@ -71,7 +71,6 @@ class UserPreferencesTest {
                     .baseCultureScore(0.5f).baseFoodScore(0.5f).baseNightlifeScore(0.5f)
                     .baseNatureScore(0.5f).baseSafetyScore(0.5f).baseCostLevel(0.5f)
                     .baseBeachScore(0.5f).baseArchitectureScore(0.5f).baseShoppingScore(0.5f)
-                    .basePublicTransport(0.5f).baseWalkability(0.5f)
                     .popularity(0f).ratingCount(0)
                     .build();
 
