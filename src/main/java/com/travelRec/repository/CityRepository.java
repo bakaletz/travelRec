@@ -22,9 +22,6 @@ public interface CityRepository extends JpaRepository<City, Long> {
 
     List<City> findByCountryContinent(Continent continent);
 
-    @Query("SELECT c FROM City c WHERE c.country.continent = :continent OR c.country.continent = CONCAT(:continent, '_ASIA') OR c.country.continent = CONCAT(:continent, '_EUROPE')")
-    List<City> findByContinentIncludingMixed(@Param("continent") String continent);
-
     List<City> findByRegion(String region);
 
     @Query("SELECT c FROM City c ORDER BY c.popularity DESC LIMIT :limit")
@@ -35,4 +32,20 @@ public interface CityRepository extends JpaRepository<City, Long> {
 
     @Query("SELECT c FROM City c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(c.region) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<City> searchByNameOrRegion(@Param("query") String query);
+
+    @Query(value = "SELECT *, " +
+            "(6371 * acos(cos(radians(:lat)) * cos(radians(latitude)) * " +
+            "cos(radians(longitude) - radians(:lng)) + " +
+            "sin(radians(:lat)) * sin(radians(latitude)))) AS distance " +
+            "FROM cities WHERE id != :cityId " +
+            "HAVING distance <= :radiusKm " +
+            "ORDER BY distance ASC", nativeQuery = true)
+    List<City> findNearbyCities(@Param("cityId") Long cityId,
+                                @Param("lat") double lat,
+                                @Param("lng") double lng,
+                                @Param("radiusKm") double radiusKm);
+
+    @Query("SELECT c FROM City c WHERE c.country.id = :countryId AND c.id != :cityId")
+    List<City> findByCountryIdExcluding(@Param("countryId") Long countryId,
+                                        @Param("cityId") Long cityId);
 }
