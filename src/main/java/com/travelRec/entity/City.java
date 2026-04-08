@@ -39,6 +39,12 @@ public class City {
     private Float avgTempWinter;
 
     @Column(nullable = false)
+    private Double latitude;
+
+    @Column(nullable = false)
+    private Double longitude;
+
+    @Column(nullable = false)
     private Float baseCostLevel;
 
     @Column(nullable = false)
@@ -64,12 +70,6 @@ public class City {
 
     @Column(nullable = false)
     private Float baseShoppingScore;
-
-    @Column(nullable = false)
-    private Float basePublicTransport;
-
-    @Column(nullable = false)
-    private Float baseWalkability;
 
     @Column(nullable = false)
     private Float costLevel;
@@ -99,6 +99,12 @@ public class City {
     private Float shoppingScore;
 
     @Column(nullable = false)
+    private Float publicTransportScore;
+
+    @Column(nullable = false)
+    private Float walkabilityScore;
+
+    @Column(nullable = false)
     private Float popularity;
 
     @Column(nullable = false)
@@ -109,7 +115,6 @@ public class City {
     private String description;
 
     private String imageUrl;
-
 
     public double[] toVector() {
         return new double[]{

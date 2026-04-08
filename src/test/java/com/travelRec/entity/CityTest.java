@@ -35,8 +35,8 @@ class CityTest {
                 .baseBeachScore(beach)
                 .baseArchitectureScore(architecture)
                 .baseShoppingScore(shopping)
-                .basePublicTransport(0.5f)
-                .baseWalkability(0.5f)
+                .publicTransportScore(0.5f)
+                .walkabilityScore(0.5f)
                 .popularity(0.0f)
                 .ratingCount(0)
                 .build();
@@ -114,8 +114,8 @@ class CityTest {
                     .baseBeachScore(0.1f)
                     .baseArchitectureScore(0.7f)
                     .baseShoppingScore(0.3f)
-                    .basePublicTransport(0.6f)
-                    .baseWalkability(0.8f)
+                    .publicTransportScore(0.6f)
+                    .walkabilityScore(0.8f)
                     .build();
 
             city.initCalculatedScores();
@@ -149,8 +149,8 @@ class CityTest {
                     .baseBeachScore(0.5f)
                     .baseArchitectureScore(0.5f)
                     .baseShoppingScore(0.5f)
-                    .basePublicTransport(0.5f)
-                    .baseWalkability(0.5f)
+                    .publicTransportScore(0.5f)
+                    .walkabilityScore(0.5f)
                     .cultureScore(0.9f)
                     .foodScore(0.8f)
                     .build();
