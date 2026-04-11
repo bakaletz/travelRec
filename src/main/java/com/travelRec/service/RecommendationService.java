@@ -30,6 +30,7 @@ public class RecommendationService {
     private final CityMapper cityMapper;
 
     private static final double LEARNING_RATE = 0.1;
+    private static final double PENALTY_MULTIPLIER = 0.85;
 
     public List<RecommendationResponse> getPersonalized(Long userId, int limit,
                                                          Continent continent,
@@ -40,13 +41,21 @@ public class RecommendationService {
 
         List<City> cities = cityRepository.findAll();
 
-        cities = applyFilters(cities, continent, cityType, climateType, prefs);
+        cities = applyFilters(cities, continent, cityType, climateType);
 
         double[] userVector = prefs.toVector();
 
         return cities.stream()
                 .map(city -> {
                     double score = cosineSimilarity(userVector, city.toVector());
+
+                    if (city.getCityType() != prefs.getPreferredCityType()) {
+                        score *= PENALTY_MULTIPLIER;
+                    }
+                    if (climateType != null && city.getClimateType() != climateType) {
+                        score *= PENALTY_MULTIPLIER;
+                    }
+
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
                             .similarityScore(Math.round(score * 1000.0) / 1000.0)
@@ -179,28 +188,24 @@ public class RecommendationService {
     }
 
     private List<City> applyFilters(List<City> cities, Continent continent,
-                                     CityType cityType, ClimateType climateType,
-                                     UserPreferences prefs) {
+                                    CityType cityType, ClimateType climateType) {
         if (continent != null) {
             cities = cities.stream()
                     .filter(c -> c.getCountry().getContinent() == continent)
                     .collect(Collectors.toList());
         }
 
-        CityType filterCityType = cityType != null ? cityType : prefs.getPreferredCityType();
-        if (filterCityType != null) {
+        if (cityType != null) {
             cities = cities.stream()
-                    .filter(c -> c.getCityType() == filterCityType)
+                    .filter(c -> c.getCityType() == cityType)
                     .collect(Collectors.toList());
         }
 
-        ClimateType filterClimate = climateType != null ? climateType : prefs.getPreferredClimate();
-        if (filterClimate != null) {
+        if (climateType != null) {
             cities = cities.stream()
-                    .filter(c -> c.getClimateType() == filterClimate)
+                    .filter(c -> c.getClimateType() == climateType)
                     .collect(Collectors.toList());
         }
-
         return cities;
     }
 }

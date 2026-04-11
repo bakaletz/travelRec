@@ -4,9 +4,11 @@ import com.travelRec.dto.recommendation.RecommendationResponse;
 import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
+import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.RecommendationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,12 +22,12 @@ public class RecommendationController {
 
     @GetMapping("/personalized")
     public ResponseEntity<List<RecommendationResponse>> getPersonalized(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Continent continent,
             @RequestParam(required = false) CityType cityType,
             @RequestParam(required = false) ClimateType climateType) {
-        return ResponseEntity.ok(recommendationService.getPersonalized(userId, limit, continent, cityType, climateType));
+        return ResponseEntity.ok(recommendationService.getPersonalized(user.getId(), limit, continent, cityType, climateType));
     }
 
     @GetMapping("/popular")
