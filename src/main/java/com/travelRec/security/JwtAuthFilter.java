@@ -1,5 +1,7 @@
 package com.travelRec.security;
 
+import com.travelRec.entity.User;
+import com.travelRec.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +21,7 @@ import java.util.List;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -35,16 +38,30 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         if (jwtUtil.isTokenValid(token)) {
+
             String email = jwtUtil.extractEmail(token);
             String role = jwtUtil.extractRole(token);
 
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                    email,
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
-            );
+            User user = userRepository.findByEmail(email)
+                    .orElse(null);
 
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            if (user != null) {
+
+                CustomUserDetails userDetails = new CustomUserDetails(
+                        user.getId(),
+                        user.getEmail(),
+                        List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                );
+
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            }
         }
 
         filterChain.doFilter(request, response);
