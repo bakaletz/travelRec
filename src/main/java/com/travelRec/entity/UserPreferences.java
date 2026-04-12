@@ -7,6 +7,8 @@ import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "user_preferences")
@@ -50,11 +52,19 @@ public class UserPreferences {
     @Builder.Default
     private Float shoppingWeight = 0.5f;
 
+    @ElementCollection(targetClass = CityType.class, fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_preferred_city_types", joinColumns = @JoinColumn(name = "preferences_id"))
     @Enumerated(EnumType.STRING)
-    private CityType preferredCityType;
+    @Column(name = "city_type")
+    @Builder.Default
+    private Set<CityType> preferredCityTypes = new HashSet<>();
 
+    @ElementCollection(targetClass = ClimateType.class, fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_preferred_climate_types", joinColumns = @JoinColumn(name = "preferences_id"))
     @Enumerated(EnumType.STRING)
-    private ClimateType preferredClimate;
+    @Column(name = "climate_type")
+    @Builder.Default
+    private Set<ClimateType> preferredClimateTypes = new HashSet<>();
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
@@ -71,5 +81,23 @@ public class UserPreferences {
                 architectureWeight,
                 shoppingWeight
         };
+    }
+
+    public boolean hasPreferredCityTypes() {
+        return preferredCityTypes != null
+                && !preferredCityTypes.isEmpty();
+    }
+
+    public boolean hasPreferredClimateTypes() {
+        return preferredClimateTypes != null
+                && !preferredClimateTypes.isEmpty();
+    }
+
+    public boolean matchesCityType(CityType type) {
+        return !hasPreferredCityTypes() || preferredCityTypes.contains(type);
+    }
+
+    public boolean matchesClimateType(ClimateType type) {
+        return !hasPreferredClimateTypes() || preferredClimateTypes.contains(type);
     }
 }

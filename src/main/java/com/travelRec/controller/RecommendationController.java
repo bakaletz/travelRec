@@ -24,9 +24,9 @@ public class RecommendationController {
     public ResponseEntity<List<RecommendationResponse>> getPersonalized(
             @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam(defaultValue = "10") int limit,
-            @RequestParam(required = false) Continent continent,
-            @RequestParam(required = false) CityType cityType,
-            @RequestParam(required = false) ClimateType climateType) {
+            @RequestParam(required = false) List<Continent> continent,
+            @RequestParam(required = false) List<CityType> cityType,
+            @RequestParam(required = false) List<ClimateType> climateType) {
         return ResponseEntity.ok(recommendationService.getPersonalized(user.getId(), limit, continent, cityType, climateType));
     }
 
@@ -38,10 +38,10 @@ public class RecommendationController {
 
     @GetMapping("/nearby")
     public ResponseEntity<List<RecommendationResponse>> getNearbyRecommendations(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam Long cityId,
             @RequestParam(defaultValue = "300") double radiusKm,
             @RequestParam(defaultValue = "10") int limit) {
-        return ResponseEntity.ok(recommendationService.getNearbyRecommendations(userId, cityId, radiusKm, limit));
+        return ResponseEntity.ok(recommendationService.getNearbyRecommendations(user.getId(), cityId, radiusKm, limit));
     }
 }

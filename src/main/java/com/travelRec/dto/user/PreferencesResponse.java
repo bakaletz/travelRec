@@ -4,6 +4,8 @@ import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import lombok.*;
 
+import java.util.Set;
+
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder
@@ -19,6 +21,6 @@ public class PreferencesResponse {
     private Float beachWeight;
     private Float architectureWeight;
     private Float shoppingWeight;
-    private CityType preferredCityType;
-    private ClimateType preferredClimate;
+    private Set<CityType> preferredCityTypes;
+    private Set<ClimateType> preferredClimateTypes;
 }

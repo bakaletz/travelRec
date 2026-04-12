@@ -3,10 +3,12 @@ package com.travelRec.controller;
 import com.travelRec.dto.user.PreferencesRequest;
 import com.travelRec.dto.user.PreferencesResponse;
 import com.travelRec.dto.user.UserResponse;
+import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -22,14 +24,15 @@ public class UserController {
     }
 
     @GetMapping("/{id}/preferences")
-    public ResponseEntity<PreferencesResponse> getPreferences(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getPreferences(id));
+    public ResponseEntity<PreferencesResponse> getPreferences(
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(userService.getPreferences(user.getId()));
     }
 
     @PutMapping("/{id}/preferences")
-    public ResponseEntity<PreferencesResponse> updatePreferences(@PathVariable Long id,
+    public ResponseEntity<PreferencesResponse> updatePreferences(@AuthenticationPrincipal CustomUserDetails user,
                                                                   @Valid @RequestBody PreferencesRequest request) {
-        return ResponseEntity.ok(userService.updatePreferences(id, request));
+        return ResponseEntity.ok(userService.updatePreferences(user.getId(), request));
     }
 
     @DeleteMapping("/{id}")

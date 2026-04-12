@@ -33,9 +33,9 @@ public class RecommendationService {
     private static final double PENALTY_MULTIPLIER = 0.85;
 
     public List<RecommendationResponse> getPersonalized(Long userId, int limit,
-                                                         Continent continent,
-                                                         CityType cityType,
-                                                         ClimateType climateType) {
+                                                        List<Continent> continent,
+                                                        List<CityType> cityType,
+                                                        List<ClimateType> climateType) {
         UserPreferences prefs = preferencesRepository.findByUserId(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Preferences not found for user: " + userId));
 
@@ -49,10 +49,10 @@ public class RecommendationService {
                 .map(city -> {
                     double score = cosineSimilarity(userVector, city.toVector());
 
-                    if (city.getCityType() != prefs.getPreferredCityType()) {
+                    if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
                         score *= PENALTY_MULTIPLIER;
                     }
-                    if (climateType != null && city.getClimateType() != climateType) {
+                    if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
                         score *= PENALTY_MULTIPLIER;
                     }
 
@@ -187,23 +187,23 @@ public class RecommendationService {
         return R * c;
     }
 
-    private List<City> applyFilters(List<City> cities, Continent continent,
-                                    CityType cityType, ClimateType climateType) {
-        if (continent != null) {
+    private List<City> applyFilters(List<City> cities, List<Continent> continents,
+                                    List<CityType> cityTypes, List<ClimateType> climateTypes) {
+        if (continents != null && !continents.isEmpty()) {
             cities = cities.stream()
-                    .filter(c -> c.getCountry().getContinent() == continent)
+                    .filter(c -> continents.contains(c.getCountry().getContinent()))
                     .collect(Collectors.toList());
         }
 
-        if (cityType != null) {
+        if (cityTypes != null && !cityTypes.isEmpty()) {
             cities = cities.stream()
-                    .filter(c -> c.getCityType() == cityType)
+                    .filter(c -> cityTypes.contains(c.getCityType()))
                     .collect(Collectors.toList());
         }
 
-        if (climateType != null) {
+        if (climateTypes != null && !climateTypes.isEmpty()) {
             cities = cities.stream()
-                    .filter(c -> c.getClimateType() == climateType)
+                    .filter(c -> climateTypes.contains(c.getClimateType()))
                     .collect(Collectors.toList());
         }
         return cities;

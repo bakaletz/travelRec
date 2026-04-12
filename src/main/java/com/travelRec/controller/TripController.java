@@ -4,11 +4,13 @@ import com.travelRec.dto.trip.AddCityToTripRequest;
 import com.travelRec.dto.trip.TripRequest;
 import com.travelRec.dto.trip.TripResponse;
 import com.travelRec.entity.enums.TripStatus;
+import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,12 +24,12 @@ public class TripController {
 
     @GetMapping
     public ResponseEntity<List<TripResponse>> getUserTrips(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam(required = false) TripStatus status) {
         if (status != null) {
-            return ResponseEntity.ok(tripService.getUserTripsByStatus(userId, status));
+            return ResponseEntity.ok(tripService.getUserTripsByStatus(user.getId(), status));
         }
-        return ResponseEntity.ok(tripService.getUserTrips(userId));
+        return ResponseEntity.ok(tripService.getUserTrips(user.getId()));
     }
 
     @GetMapping("/{id}")
@@ -36,9 +38,9 @@ public class TripController {
     }
 
     @PostMapping
-    public ResponseEntity<TripResponse> createTrip(@RequestParam Long userId,
+    public ResponseEntity<TripResponse> createTrip(@AuthenticationPrincipal CustomUserDetails user,
                                                     @Valid @RequestBody TripRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(tripService.createTrip(userId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(tripService.createTrip(user.getId(), request));
     }
 
     @PutMapping("/{id}")

@@ -10,7 +10,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
+
 
 class PreferencesMapperTest {
 
@@ -33,8 +36,8 @@ class PreferencesMapperTest {
                 .beachWeight(0.4f)
                 .architectureWeight(0.5f)
                 .shoppingWeight(0.1f)
-                .preferredCityType(CityType.LARGE_CITY)
-                .preferredClimate(ClimateType.MEDITERRANEAN)
+                .preferredCityTypes(Set.of(CityType.LARGE_CITY))
+                .preferredClimateTypes(Set.of(ClimateType.MEDITERRANEAN))
                 .build();
     }
 
@@ -66,8 +69,8 @@ class PreferencesMapperTest {
             UserPreferences prefs = buildPreferences();
             PreferencesResponse response = mapper.toResponse(prefs);
 
-            assertEquals(CityType.LARGE_CITY, response.getPreferredCityType());
-            assertEquals(ClimateType.MEDITERRANEAN, response.getPreferredClimate());
+            assertEquals(Set.of(CityType.LARGE_CITY), response.getPreferredCityTypes());
+            assertEquals(Set.of(ClimateType.MEDITERRANEAN), response.getPreferredClimateTypes());
         }
 
         @Test
@@ -79,8 +82,8 @@ class PreferencesMapperTest {
 
             PreferencesResponse response = mapper.toResponse(prefs);
 
-            assertNull(response.getPreferredCityType());
-            assertNull(response.getPreferredClimate());
+            assertTrue(response.getPreferredCityTypes().isEmpty());
+            assertTrue(response.getPreferredClimateTypes().isEmpty());
         }
     }
 
@@ -121,8 +124,8 @@ class PreferencesMapperTest {
             assertEquals(0.9f, prefs.getCultureWeight());
             assertEquals(0.8f, prefs.getFoodWeight());
             assertEquals(0.3f, prefs.getNightlifeWeight());
-            assertEquals(CityType.LARGE_CITY, prefs.getPreferredCityType());
-            assertEquals(ClimateType.MEDITERRANEAN, prefs.getPreferredClimate());
+            assertEquals(Set.of(CityType.LARGE_CITY), prefs.getPreferredCityTypes());
+            assertEquals(Set.of(ClimateType.MEDITERRANEAN), prefs.getPreferredClimateTypes());
         }
 
         @Test
@@ -139,8 +142,8 @@ class PreferencesMapperTest {
                     .beachWeight(0.1f)
                     .architectureWeight(0.1f)
                     .shoppingWeight(0.1f)
-                    .preferredCityType(CityType.RESORT)
-                    .preferredClimate(ClimateType.TROPICAL)
+                    .preferredCityTypes(Set.of(CityType.RESORT))
+                    .preferredClimateTypes(Set.of(ClimateType.TROPICAL))
                     .build();
 
             mapper.updateEntity(prefs, request);
@@ -154,8 +157,8 @@ class PreferencesMapperTest {
             assertEquals(0.1f, prefs.getBeachWeight());
             assertEquals(0.1f, prefs.getArchitectureWeight());
             assertEquals(0.1f, prefs.getShoppingWeight());
-            assertEquals(CityType.RESORT, prefs.getPreferredCityType());
-            assertEquals(ClimateType.TROPICAL, prefs.getPreferredClimate());
+            assertEquals(Set.of(CityType.RESORT), prefs.getPreferredCityTypes());
+            assertEquals(Set.of(ClimateType.TROPICAL), prefs.getPreferredClimateTypes());
         }
 
         @Test

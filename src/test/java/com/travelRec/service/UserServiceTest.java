@@ -23,6 +23,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -146,7 +147,7 @@ class UserServiceTest {
         void shouldUpdate() {
             PreferencesRequest request = PreferencesRequest.builder()
                     .cultureWeight(0.1f)
-                    .preferredCityType(CityType.RESORT)
+                    .preferredCityTypes(Set.of(CityType.RESORT))
                     .build();
 
             prefs.setFoodWeight(0.8f);
@@ -157,7 +158,7 @@ class UserServiceTest {
 
             assertEquals(0.1f, response.getCultureWeight());
             assertEquals(0.8f, response.getFoodWeight());
-            assertEquals(CityType.RESORT, response.getPreferredCityType());
+            assertEquals(Set.of(CityType.RESORT), response.getPreferredCityTypes());
 
             verify(preferencesRepository, never()).save(any(UserPreferences.class));
         }

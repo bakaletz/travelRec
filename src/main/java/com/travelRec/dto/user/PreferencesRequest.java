@@ -4,7 +4,11 @@ import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.*;
+
+import java.util.Set;
 
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
@@ -38,6 +42,11 @@ public class PreferencesRequest {
     @DecimalMin("0.0") @DecimalMax("1.0")
     private Float shoppingWeight;
 
-    private CityType preferredCityType;
-    private ClimateType preferredClimate;
+    @NotNull
+    @Size(min = 1, message = "At least one city type must be selected")
+    private Set<CityType> preferredCityTypes;
+
+    @NotNull
+    @Size(min = 1, message = "At least one climate type must be selected")
+    private Set<ClimateType> preferredClimateTypes;
 }
