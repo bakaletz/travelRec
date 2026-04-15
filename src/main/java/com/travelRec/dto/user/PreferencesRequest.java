@@ -43,10 +43,8 @@ public class PreferencesRequest {
     private Float shoppingWeight;
 
     @NotNull
-    @Size(min = 1, message = "At least one city type must be selected")
     private Set<CityType> preferredCityTypes;
 
     @NotNull
-    @Size(min = 1, message = "At least one climate type must be selected")
     private Set<ClimateType> preferredClimateTypes;
 }
