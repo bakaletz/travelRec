@@ -2,6 +2,7 @@ package com.travelRec.controller;
 
 import com.travelRec.dto.user.PreferencesRequest;
 import com.travelRec.dto.user.PreferencesResponse;
+import com.travelRec.dto.user.UpdateUserRequest;
 import com.travelRec.dto.user.UserResponse;
 import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.UserService;
@@ -18,6 +19,19 @@ public class UserController {
 
     private final UserService userService;
 
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getCurrentUser(
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(userService.getUserById(user.getId()));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<UserResponse> updateCurrentUser(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @Valid @RequestBody UpdateUserRequest request) {
+        return ResponseEntity.ok(userService.updateUser(user.getId(), request));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserById(id));
@@ -30,11 +44,11 @@ public class UserController {
     }
 
     @PutMapping("/{id}/preferences")
-    public ResponseEntity<PreferencesResponse> updatePreferences(@AuthenticationPrincipal CustomUserDetails user,
-                                                                  @Valid @RequestBody PreferencesRequest request) {
+    public ResponseEntity<PreferencesResponse> updatePreferences(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @Valid @RequestBody PreferencesRequest request) {
         return ResponseEntity.ok(userService.updatePreferences(user.getId(), request));
     }
-
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);

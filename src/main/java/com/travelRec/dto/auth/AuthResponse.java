@@ -1,15 +1,20 @@
 package com.travelRec.dto.auth;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AuthResponse {
-
     private String token;
+    private Long id;
     private String email;
     private String firstName;
     private String lastName;
+    private String avatarUrl;
     private String role;
 }

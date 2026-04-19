@@ -26,31 +26,32 @@ public class RatingController {
         return ResponseEntity.ok(ratingService.getRatingsByTrip(tripId));
     }
 
+    @GetMapping("/user/me")
+    public ResponseEntity<List<RatingResponse>> getCurrentUserRatings(
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ratingService.getRatingsByUser(user.getId()));
+    }
+
     @GetMapping("/city/{cityId}")
     public ResponseEntity<List<RatingResponse>> getRatingsByCity(@PathVariable Long cityId) {
         return ResponseEntity.ok(ratingService.getRatingsByCity(cityId));
     }
 
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<RatingResponse>> getRatingsByUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(ratingService.getRatingsByUser(userId));
-    }
-
     @PostMapping("/quick")
     public ResponseEntity<RatingResponse> createQuickRating(@AuthenticationPrincipal CustomUserDetails user,
-                                                             @Valid @RequestBody QuickRatingRequest request) {
+                                                            @Valid @RequestBody QuickRatingRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ratingService.createQuickRating(user.getId(), request));
     }
 
     @PostMapping("/detailed")
     public ResponseEntity<RatingResponse> createDetailedRating(@AuthenticationPrincipal CustomUserDetails user,
-                                                                @Valid @RequestBody DetailedRatingRequest request) {
+                                                               @Valid @RequestBody DetailedRatingRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ratingService.createDetailedRating(user.getId(), request));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<RatingResponse> updateRating(@PathVariable Long id,
-                                                        @Valid @RequestBody DetailedRatingRequest request) {
+                                                       @Valid @RequestBody DetailedRatingRequest request) {
         return ResponseEntity.ok(ratingService.updateRating(id, request));
     }
 }
