@@ -14,6 +14,7 @@ import com.travelRec.repository.TripCityRepository;
 import com.travelRec.repository.TripRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,13 +41,13 @@ public class TripService {
     }
 
     public List<TripResponse> getUserTripsByStatus(Long userId, TripStatus status) {
-        return tripRepository.findByUserIdAndStatus(userId, status).stream()
+        return tripRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, status).stream()
                 .map(this::buildResponse)
                 .collect(Collectors.toList());
     }
 
-    public TripResponse getTripById(Long id) {
-        Trip trip = findTripOrThrow(id);
+    public TripResponse getTripById(Long userId, Long id) {
+        Trip trip = findOwnedTrip(userId, id);
         return buildResponse(trip);
     }
 
@@ -59,8 +60,8 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse updateTrip(Long id, TripRequest request) {
-        Trip trip = findTripOrThrow(id);
+    public TripResponse updateTrip(Long userId, Long id, TripRequest request) {
+        Trip trip = findOwnedTrip(userId, id);
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Only PLANNED trips can be edited");
         }
@@ -69,22 +70,22 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse completeTrip(Long id) {
-        Trip trip = findTripOrThrow(id);
+    public TripResponse completeTrip(Long userId, Long id) {
+        Trip trip = findOwnedTrip(userId, id);
         trip.complete();
         return buildResponse(trip);
     }
 
     @Transactional
-    public TripResponse cancelTrip(Long id) {
-        Trip trip = findTripOrThrow(id);
+    public TripResponse cancelTrip(Long userId, Long id) {
+        Trip trip = findOwnedTrip(userId, id);
         trip.cancel();
         return buildResponse(trip);
     }
 
     @Transactional
-    public TripResponse addCityToTrip(Long tripId, AddCityToTripRequest request) {
-        Trip trip = findTripOrThrow(tripId);
+    public TripResponse addCityToTrip(Long userId, Long tripId, AddCityToTripRequest request) {
+        Trip trip = findOwnedTrip(userId, tripId);
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Can only add cities to PLANNED trips");
         }
@@ -107,8 +108,8 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse removeCityFromTrip(Long tripId, Long cityId) {
-        Trip trip = findTripOrThrow(tripId);
+    public TripResponse removeCityFromTrip(Long userId, Long tripId, Long cityId) {
+        Trip trip = findOwnedTrip(userId, tripId);
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Can only remove cities from PLANNED trips");
         }
@@ -118,19 +119,14 @@ public class TripService {
     }
 
     @Transactional
-    public void deleteTrip(Long id) {
-        Trip trip = findTripOrThrow(id);
+    public void deleteTrip(Long userId, Long id) {
+        Trip trip = findOwnedTrip(userId, id);
         tripRepository.delete(trip);
     }
 
-    public Trip findTripOrThrow(Long id) {
-        return tripRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Trip not found with id: " + id));
-    }
-
     @Transactional
-    public TripResponse reorderCities(Long tripId, List<Long> cityIds) {
-        Trip trip = findTripOrThrow(tripId);
+    public TripResponse reorderCities(Long userId, Long tripId, List<Long> cityIds) {
+        Trip trip = findOwnedTrip(userId, tripId);
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Can only reorder cities in PLANNED trips");
         }
@@ -147,8 +143,8 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse optimizeRoute(Long tripId) {
-        Trip trip = findTripOrThrow(tripId);
+    public TripResponse optimizeRoute(Long userId, Long tripId) {
+        Trip trip = findOwnedTrip(userId, tripId);
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Can only optimize PLANNED trips");
         }
@@ -185,6 +181,19 @@ public class TripService {
         }
 
         return buildResponse(trip);
+    }
+
+    public Trip findTripOrThrow(Long id) {
+        return tripRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Trip not found with id: " + id));
+    }
+
+    private Trip findOwnedTrip(Long userId, Long tripId) {
+        Trip trip = findTripOrThrow(tripId);
+        if (!trip.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You don't have access to this trip");
+        }
+        return trip;
     }
 
     private TripResponse buildResponse(Trip trip) {

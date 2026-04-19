@@ -9,6 +9,7 @@ import com.travelRec.mapper.RatingMapper;
 import com.travelRec.repository.RatingRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,11 @@ public class RatingService {
     private final RecommendationService recommendationService;
     private final RatingMapper ratingMapper;
 
-    public List<RatingResponse> getRatingsByTrip(Long tripId) {
+    public List<RatingResponse> getRatingsByTrip(Long userId, Long tripId) {
+        Trip trip = tripService.findTripOrThrow(tripId);
+        if (!trip.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You don't have access to this trip's ratings");
+        }
         return ratingRepository.findByTripId(tripId).stream()
                 .map(ratingMapper::toResponse)
                 .collect(Collectors.toList());
@@ -51,7 +56,7 @@ public class RatingService {
         Trip trip = tripService.findTripOrThrow(request.getTripId());
         City city = cityService.findCityOrThrow(request.getCityId());
 
-        validateRating(userId, trip, request.getTripId(), request.getCityId());
+        validateCanCreate(userId, trip, request.getTripId(), request.getCityId());
 
         Rating rating = ratingMapper.toEntity(request, user, trip, city);
         Rating saved = ratingRepository.save(rating);
@@ -67,7 +72,7 @@ public class RatingService {
         Trip trip = tripService.findTripOrThrow(request.getTripId());
         City city = cityService.findCityOrThrow(request.getCityId());
 
-        validateRating(userId, trip, request.getTripId(), request.getCityId());
+        validateCanCreate(userId, trip, request.getTripId(), request.getCityId());
 
         Rating rating = ratingMapper.toEntity(request, user, trip, city);
         Rating saved = ratingRepository.save(rating);
@@ -78,11 +83,14 @@ public class RatingService {
     }
 
     @Transactional
-    public RatingResponse updateRating(Long ratingId, DetailedRatingRequest request) {
+    public RatingResponse updateRating(Long userId, Long ratingId, DetailedRatingRequest request) {
         Rating rating = ratingRepository.findById(ratingId)
                 .orElseThrow(() -> new EntityNotFoundException("Rating not found with id: " + ratingId));
 
-        // Оновлюємо поля керованої сутності
+        if (!rating.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You can only update your own ratings");
+        }
+
         rating.setOverallScore(request.getOverallScore());
         rating.setCultureRating(request.getCultureRating());
         rating.setFoodRating(request.getFoodRating());
@@ -96,12 +104,18 @@ public class RatingService {
         rating.setFeedback(request.getFeedback());
 
         cityService.recalculateScores(rating.getCity().getId());
-        recommendationService.updatePreferences(rating.getUser(), rating);
+        if (rating.isDetailed()) {
+            recommendationService.updatePreferences(rating.getUser(), rating);
+        }
 
         return ratingMapper.toResponse(rating);
     }
 
-    private void validateRating(Long userId, Trip trip, Long tripId, Long cityId) {
+    private void validateCanCreate(Long userId, Trip trip, Long tripId, Long cityId) {
+        if (!trip.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You can only rate your own trips");
+        }
+
         if (trip.getStatus() != TripStatus.COMPLETED && trip.getStatus() != TripStatus.RATED) {
             throw new IllegalStateException("Can only rate COMPLETED or RATED trips");
         }

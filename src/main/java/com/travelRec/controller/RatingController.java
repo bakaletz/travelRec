@@ -22,8 +22,10 @@ public class RatingController {
     private final RatingService ratingService;
 
     @GetMapping("/trip/{tripId}")
-    public ResponseEntity<List<RatingResponse>> getRatingsByTrip(@PathVariable Long tripId) {
-        return ResponseEntity.ok(ratingService.getRatingsByTrip(tripId));
+    public ResponseEntity<List<RatingResponse>> getRatingsByTrip(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @PathVariable Long tripId) {
+        return ResponseEntity.ok(ratingService.getRatingsByTrip(user.getId(), tripId));
     }
 
     @GetMapping("/user/me")
@@ -50,8 +52,9 @@ public class RatingController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<RatingResponse> updateRating(@PathVariable Long id,
+    public ResponseEntity<RatingResponse> updateRating(@AuthenticationPrincipal CustomUserDetails user,
+                                                       @PathVariable Long id,
                                                        @Valid @RequestBody DetailedRatingRequest request) {
-        return ResponseEntity.ok(ratingService.updateRating(id, request));
+        return ResponseEntity.ok(ratingService.updateRating(user.getId(), id, request));
     }
 }
