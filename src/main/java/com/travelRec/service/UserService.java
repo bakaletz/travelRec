@@ -2,6 +2,7 @@ package com.travelRec.service;
 
 import com.travelRec.dto.user.PreferencesRequest;
 import com.travelRec.dto.user.PreferencesResponse;
+import com.travelRec.dto.user.UpdateUserRequest;
 import com.travelRec.dto.user.UserResponse;
 import com.travelRec.entity.User;
 import com.travelRec.entity.UserPreferences;
@@ -58,6 +59,24 @@ public class UserService {
         }
 
         return preferencesMapper.toResponse(prefs);
+    }
+
+    @Transactional
+    public UserResponse updateUser(Long userId, UpdateUserRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+        if (request.getFirstName() != null) {
+            user.setFirstName(request.getFirstName());
+        }
+        if (request.getLastName() != null) {
+            user.setLastName(request.getLastName());
+        }
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl().isBlank() ? null : request.getAvatarUrl());
+        }
+
+        return userMapper.toResponse(user);
     }
 
     @Transactional

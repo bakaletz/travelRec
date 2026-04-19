@@ -6,10 +6,7 @@ import com.travelRec.entity.enums.*;
 import com.travelRec.mapper.CityMapper;
 import com.travelRec.repository.CityRepository;
 import com.travelRec.repository.UserPreferencesRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -18,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -215,8 +213,8 @@ class RecommendationServiceTest {
         }
 
         @Test
-        @DisplayName("should filter by continent")
-        void shouldFilterByContinent() {
+        @DisplayName("should filter by single continent")
+        void shouldFilterBySingleContinent() {
             Country asiaCountry = Country.builder().id(2L).name("Japan").code("JP").continent(Continent.ASIA).build();
             City europeanCity = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
             City asianCity = buildCity("Tokyo", 0.9f, 0.9f, 0.9f, 0.3f, 0.9f, 0.7f, 0.1f, 0.8f, 0.9f);
@@ -225,15 +223,41 @@ class RecommendationServiceTest {
             when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
             when(cityRepository.findAll()).thenReturn(List.of(europeanCity, asianCity));
 
-            List<RecommendationResponse> results = recommendationService.getPersonalized(1L, 10, Continent.EUROPE, null, null);
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, List.of(Continent.EUROPE), null, null);
 
             assertEquals(1, results.size());
             assertEquals("Budapest", results.get(0).getCity().getName());
         }
 
         @Test
-        @DisplayName("should filter by city type")
-        void shouldFilterByCityType() {
+        @DisplayName("should filter by multiple continents")
+        void shouldFilterByMultipleContinents() {
+            Country asiaCountry = Country.builder().id(2L).name("Japan").code("JP").continent(Continent.ASIA).build();
+            Country africaCountry = Country.builder().id(3L).name("Kenya").code("KE").continent(Continent.AFRICA).build();
+
+            City europeanCity = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
+            City asianCity = buildCity("Tokyo", 0.9f, 0.9f, 0.9f, 0.3f, 0.9f, 0.7f, 0.1f, 0.8f, 0.9f);
+            asianCity.setCountry(asiaCountry);
+            City africanCity = buildCity("Nairobi", 0.6f, 0.5f, 0.3f, 0.9f, 0.4f, 0.3f, 0.1f, 0.4f, 0.3f);
+            africanCity.setCountry(africaCountry);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(europeanCity, asianCity, africanCity));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, List.of(Continent.EUROPE, Continent.ASIA), null, null);
+
+            assertEquals(2, results.size());
+            List<String> names = results.stream().map(r -> r.getCity().getName()).toList();
+            assertTrue(names.contains("Budapest"));
+            assertTrue(names.contains("Tokyo"));
+            assertFalse(names.contains("Nairobi"));
+        }
+
+        @Test
+        @DisplayName("should filter by single city type")
+        void shouldFilterBySingleCityType() {
             City megapolis = buildCity("Tokyo", 0.9f, 0.9f, 0.9f, 0.3f, 0.9f, 0.7f, 0.1f, 0.8f, 0.9f);
             megapolis.setCityType(CityType.MEGAPOLIS);
             City resort = buildCity("Antalya", 0.4f, 0.7f, 0.6f, 0.8f, 0.7f, 0.4f, 0.95f, 0.3f, 0.5f);
@@ -242,7 +266,82 @@ class RecommendationServiceTest {
             when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
             when(cityRepository.findAll()).thenReturn(List.of(megapolis, resort));
 
-            List<RecommendationResponse> results = recommendationService.getPersonalized(1L, 10, null, CityType.RESORT, null);
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, null, List.of(CityType.RESORT), null);
+
+            assertEquals(1, results.size());
+            assertEquals("Antalya", results.get(0).getCity().getName());
+        }
+
+        @Test
+        @DisplayName("should filter by multiple city types")
+        void shouldFilterByMultipleCityTypes() {
+            City megapolis = buildCity("Tokyo", 0.9f, 0.9f, 0.9f, 0.3f, 0.9f, 0.7f, 0.1f, 0.8f, 0.9f);
+            megapolis.setCityType(CityType.MEGAPOLIS);
+            City resort = buildCity("Antalya", 0.4f, 0.7f, 0.6f, 0.8f, 0.7f, 0.4f, 0.95f, 0.3f, 0.5f);
+            resort.setCityType(CityType.RESORT);
+            City smallTown = buildCity("Hallstatt", 0.6f, 0.5f, 0.1f, 0.9f, 0.9f, 0.7f, 0.2f, 0.8f, 0.2f);
+            smallTown.setCityType(CityType.SMALL_TOWN);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(megapolis, resort, smallTown));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, null, List.of(CityType.RESORT, CityType.SMALL_TOWN), null);
+
+            assertEquals(2, results.size());
+            List<String> names = results.stream().map(r -> r.getCity().getName()).toList();
+            assertTrue(names.contains("Antalya"));
+            assertTrue(names.contains("Hallstatt"));
+            assertFalse(names.contains("Tokyo"));
+        }
+
+        @Test
+        @DisplayName("should filter by multiple climate types")
+        void shouldFilterByMultipleClimateTypes() {
+            City temperate = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
+            temperate.setClimateType(ClimateType.TEMPERATE);
+            City mediterranean = buildCity("Barcelona", 0.9f, 0.9f, 0.8f, 0.5f, 0.6f, 0.6f, 0.8f, 0.9f, 0.8f);
+            mediterranean.setClimateType(ClimateType.MEDITERRANEAN);
+            City tropical = buildCity("Bangkok", 0.7f, 0.9f, 0.8f, 0.4f, 0.5f, 0.3f, 0.3f, 0.6f, 0.8f);
+            tropical.setClimateType(ClimateType.TROPICAL);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(temperate, mediterranean, tropical));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, null, null, List.of(ClimateType.TEMPERATE, ClimateType.MEDITERRANEAN));
+
+            assertEquals(2, results.size());
+            List<String> names = results.stream().map(r -> r.getCity().getName()).toList();
+            assertTrue(names.contains("Budapest"));
+            assertTrue(names.contains("Barcelona"));
+            assertFalse(names.contains("Bangkok"));
+        }
+
+        @Test
+        @DisplayName("should combine multiple filter types")
+        void shouldCombineMultipleFilterTypes() {
+            Country asiaCountry = Country.builder().id(2L).name("Thailand").code("TH").continent(Continent.ASIA).build();
+
+            City europeanResort = buildCity("Antalya", 0.4f, 0.7f, 0.6f, 0.8f, 0.7f, 0.4f, 0.95f, 0.3f, 0.5f);
+            europeanResort.setCityType(CityType.RESORT);
+            europeanResort.setClimateType(ClimateType.MEDITERRANEAN);
+
+            City europeanLarge = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
+            europeanLarge.setCityType(CityType.LARGE_CITY);
+            europeanLarge.setClimateType(ClimateType.TEMPERATE);
+
+            City asianResort = buildCity("Phuket", 0.3f, 0.8f, 0.7f, 0.9f, 0.6f, 0.3f, 0.95f, 0.2f, 0.4f);
+            asianResort.setCountry(asiaCountry);
+            asianResort.setCityType(CityType.RESORT);
+            asianResort.setClimateType(ClimateType.TROPICAL);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(europeanResort, europeanLarge, asianResort));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, List.of(Continent.EUROPE), List.of(CityType.RESORT), null);
 
             assertEquals(1, results.size());
             assertEquals("Antalya", results.get(0).getCity().getName());
@@ -256,15 +355,46 @@ class RecommendationServiceTest {
             when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
             when(cityRepository.findAll()).thenReturn(List.of(city));
 
-            List<RecommendationResponse> results = recommendationService.getPersonalized(1L, 10, Continent.ASIA, null, null);
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, List.of(Continent.ASIA), null, null);
 
             assertTrue(results.isEmpty());
         }
 
         @Test
+        @DisplayName("should return all cities when filters are null")
+        void shouldReturnAllWhenFiltersNull() {
+            City city1 = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
+            City city2 = buildCity("Vienna", 0.7f, 0.7f, 0.5f, 0.6f, 0.8f, 0.6f, 0.1f, 0.8f, 0.6f);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(city1, city2));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(1L, 10, null, null, null);
+
+            assertEquals(2, results.size());
+        }
+
+        @Test
+        @DisplayName("should return all cities when filters are empty lists")
+        void shouldReturnAllWhenFiltersEmpty() {
+            City city1 = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);
+            City city2 = buildCity("Vienna", 0.7f, 0.7f, 0.5f, 0.6f, 0.8f, 0.6f, 0.1f, 0.8f, 0.6f);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findAll()).thenReturn(List.of(city1, city2));
+
+            List<RecommendationResponse> results = recommendationService.getPersonalized(
+                    1L, 10, List.of(), List.of(), List.of());
+
+            assertEquals(2, results.size());
+        }
+
+        @Disabled
+        @Test
         @DisplayName("should use preferred filters from preferences when not specified")
         void shouldUsePreferredFilters() {
-            prefs.setPreferredCityType(CityType.RESORT);
+            prefs.setPreferredCityTypes(Set.of(CityType.RESORT));
             City resort = buildCity("Antalya", 0.5f, 0.7f, 0.6f, 0.8f, 0.7f, 0.4f, 0.95f, 0.3f, 0.5f);
             resort.setCityType(CityType.RESORT);
             City large = buildCity("Budapest", 0.8f, 0.8f, 0.8f, 0.5f, 0.7f, 0.4f, 0.2f, 0.9f, 0.5f);

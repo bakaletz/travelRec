@@ -17,4 +17,8 @@ public class TripCityResponse {
     private Integer visitOrder;
     private LocalDate arrivalDate;
     private LocalDate departureDate;
+    private Double latitude;
+    private Double longitude;
+    private Double distanceFromPrevious;
+    private Boolean suboptimalOrder;
 }

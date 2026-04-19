@@ -19,4 +19,5 @@ public class TripResponse {
     private LocalDate endDate;
     private LocalDateTime createdAt;
     private List<TripCityResponse> cities;
+    private Double totalDistance;
 }

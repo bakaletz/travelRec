@@ -4,9 +4,11 @@ import com.travelRec.dto.recommendation.RecommendationResponse;
 import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
+import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.RecommendationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,12 +22,12 @@ public class RecommendationController {
 
     @GetMapping("/personalized")
     public ResponseEntity<List<RecommendationResponse>> getPersonalized(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam(defaultValue = "10") int limit,
-            @RequestParam(required = false) Continent continent,
-            @RequestParam(required = false) CityType cityType,
-            @RequestParam(required = false) ClimateType climateType) {
-        return ResponseEntity.ok(recommendationService.getPersonalized(userId, limit, continent, cityType, climateType));
+            @RequestParam(required = false) List<Continent> continent,
+            @RequestParam(required = false) List<CityType> cityType,
+            @RequestParam(required = false) List<ClimateType> climateType) {
+        return ResponseEntity.ok(recommendationService.getPersonalized(user.getId(), limit, continent, cityType, climateType));
     }
 
     @GetMapping("/popular")
@@ -36,10 +38,10 @@ public class RecommendationController {
 
     @GetMapping("/nearby")
     public ResponseEntity<List<RecommendationResponse>> getNearbyRecommendations(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam Long cityId,
             @RequestParam(defaultValue = "300") double radiusKm,
             @RequestParam(defaultValue = "10") int limit) {
-        return ResponseEntity.ok(recommendationService.getNearbyRecommendations(userId, cityId, radiusKm, limit));
+        return ResponseEntity.ok(recommendationService.getNearbyRecommendations(user.getId(), cityId, radiusKm, limit));
     }
 }
