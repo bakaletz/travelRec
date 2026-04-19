@@ -43,6 +43,12 @@ public class TripController {
         return ResponseEntity.status(HttpStatus.CREATED).body(tripService.createTrip(user.getId(), request));
     }
 
+    @PostMapping("/{id}/cities")
+    public ResponseEntity<TripResponse> addCityToTrip(@PathVariable Long id,
+                                                      @Valid @RequestBody AddCityToTripRequest request) {
+        return ResponseEntity.ok(tripService.addCityToTrip(id, request));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<TripResponse> updateTrip(@PathVariable Long id,
                                                     @Valid @RequestBody TripRequest request) {
@@ -59,10 +65,15 @@ public class TripController {
         return ResponseEntity.ok(tripService.cancelTrip(id));
     }
 
-    @PostMapping("/{id}/cities")
-    public ResponseEntity<TripResponse> addCityToTrip(@PathVariable Long id,
-                                                       @Valid @RequestBody AddCityToTripRequest request) {
-        return ResponseEntity.ok(tripService.addCityToTrip(id, request));
+    @PatchMapping("/{id}/reorder")
+    public ResponseEntity<TripResponse> reorderCities(@PathVariable Long id,
+                                                      @RequestBody List<Long> cityIds) {
+        return ResponseEntity.ok(tripService.reorderCities(id, cityIds));
+    }
+
+    @PatchMapping("/{id}/optimize")
+    public ResponseEntity<TripResponse> optimizeRoute(@PathVariable Long id) {
+        return ResponseEntity.ok(tripService.optimizeRoute(id));
     }
 
     @DeleteMapping("/{id}/cities/{cityId}")

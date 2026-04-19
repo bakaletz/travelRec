@@ -8,6 +8,7 @@ import com.travelRec.entity.TripCity;
 import com.travelRec.entity.User;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -39,7 +40,7 @@ public class TripMapper {
                 .build();
     }
 
-    public TripCityResponse toTripCityResponse(TripCity tripCity) {
+    private TripCityResponse toTripCityResponse(TripCity tripCity) {
         return TripCityResponse.builder()
                 .id(tripCity.getId())
                 .cityId(tripCity.getCity().getId())
@@ -49,6 +50,8 @@ public class TripMapper {
                 .visitOrder(tripCity.getVisitOrder())
                 .arrivalDate(tripCity.getArrivalDate())
                 .departureDate(tripCity.getDepartureDate())
+                .latitude(tripCity.getCity().getLatitude())
+                .longitude(tripCity.getCity().getLongitude())
                 .build();
     }
 
