@@ -52,6 +52,23 @@ public interface CityRepository extends JpaRepository<City, Long> {
                                 @Param("lng") double lng,
                                 @Param("radiusKm") double radiusKm);
 
+    @Query(value = """
+        SELECT * FROM (
+            SELECT c.*,
+                (6371 * acos(
+                    cos(radians(:lat)) * cos(radians(c.latitude)) *
+                    cos(radians(c.longitude) - radians(:lng)) +
+                    sin(radians(:lat)) * sin(radians(c.latitude))
+                )) AS distance
+            FROM cities c
+        ) AS nearby
+        WHERE distance <= :radiusKm
+        ORDER BY distance ASC
+        """, nativeQuery = true)
+    List<City> findNearbyCitiesByCoordinates(@Param("lat") double lat,
+                                             @Param("lng") double lng,
+                                             @Param("radiusKm") double radiusKm);
+
     @Query("SELECT c FROM City c WHERE c.country.id = :countryId AND c.id != :cityId")
     List<City> findByCountryIdExcluding(@Param("countryId") Long countryId,
                                         @Param("cityId") Long cityId);

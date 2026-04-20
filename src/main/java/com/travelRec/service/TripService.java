@@ -73,6 +73,15 @@ public class TripService {
     public TripResponse completeTrip(Long userId, Long id) {
         Trip trip = findOwnedTrip(userId, id);
         trip.complete();
+
+        for (TripCity tc : trip.getTripCities()) {
+            Long cityId = tc.getCity().getId();
+            long otherCompleted = tripCityRepository.countOtherCompletedTripsWithCity(userId, cityId, id);
+            if (otherCompleted == 0) {
+                cityService.incrementPopularity(cityId);
+            }
+        }
+
         return buildResponse(trip);
     }
 
@@ -121,7 +130,21 @@ public class TripService {
     @Transactional
     public void deleteTrip(Long userId, Long id) {
         Trip trip = findOwnedTrip(userId, id);
+        boolean wasCompleted = trip.getStatus() == TripStatus.COMPLETED
+                || trip.getStatus() == TripStatus.RATED;
+
+        List<Long> cityIds = wasCompleted
+                ? trip.getTripCities().stream().map(tc -> tc.getCity().getId()).toList()
+                : List.of();
+
         tripRepository.delete(trip);
+
+        for (Long cityId : cityIds) {
+            long otherCompleted = tripCityRepository.countOtherCompletedTripsWithCity(userId, cityId, id);
+            if (otherCompleted == 0) {
+                cityService.decrementPopularity(cityId);
+            }
+        }
     }
 
     @Transactional

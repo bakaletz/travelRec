@@ -10,6 +10,7 @@ import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
 import com.travelRec.mapper.CityMapper;
 import com.travelRec.repository.CityRepository;
+import com.travelRec.repository.RatingRepository;
 import com.travelRec.repository.UserPreferencesRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +29,14 @@ public class RecommendationService {
     private final CityRepository cityRepository;
     private final UserPreferencesRepository preferencesRepository;
     private final CityMapper cityMapper;
+    private final RatingRepository ratingRepository;
 
     private static final double LEARNING_RATE = 0.1;
     private static final double PENALTY_MULTIPLIER = 0.85;
+    private static final double CITY_TYPE_PENALTY = 0.70;
+    private static final double CLIMATE_PENALTY = 0.80;
+    private static final double CONTINENT_PENALTY = 0.50;
+    private static final int POSITIVE_RATING_THRESHOLD = 4;
 
     public List<RecommendationResponse> getPersonalized(Long userId, int limit,
                                                         List<Continent> continent,
@@ -75,6 +81,54 @@ public class RecommendationService {
                 .collect(Collectors.toList());
     }
 
+    public List<RecommendationResponse> getSimilarCities(Long cityId, int limit) {
+        City origin = cityRepository.findById(cityId)
+                .orElseThrow(() -> new EntityNotFoundException("City not found with id: " + cityId));
+
+        double[] originVector = origin.toVector();
+
+        return cityRepository.findAll().stream()
+                .filter(city -> !city.getId().equals(cityId))
+                .map(city -> {
+                    double similarity = cosineSimilarity(originVector, city.toVector());
+                    similarity = applyContextPenalties(similarity, origin, city);
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(Math.round(similarity * 1000.0) / 1000.0)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    public List<RecommendationResponse> getBecauseYouLiked(Long userId, int limit) {
+        List<Rating> positiveRatings = ratingRepository.findRecentPositiveByUserId(userId, POSITIVE_RATING_THRESHOLD);
+        if (positiveRatings.isEmpty()) {
+            return List.of();
+        }
+
+        City seed = positiveRatings.get(0).getCity();
+        double[] seedVector = seed.toVector();
+        String seedName = seed.getName();
+        String reason = "Because you liked " + seedName;
+
+        return cityRepository.findAll().stream()
+                .filter(city -> !city.getId().equals(seed.getId()))
+                .map(city -> {
+                    double similarity = cosineSimilarity(seedVector, city.toVector());
+                    similarity = applyContextPenalties(similarity, seed, city);
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(Math.round(similarity * 1000.0) / 1000.0)
+                            .reason(reason)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
     public List<RecommendationResponse> getNearbyRecommendations(Long userId, Long cityId, double radiusKm, int limit) {
         UserPreferences prefs = preferencesRepository.findByUserId(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Preferences not found for user: " + userId));
@@ -103,6 +157,38 @@ public class RecommendationService {
                 .limit(limit)
                 .collect(Collectors.toList());
     }
+
+    public List<RecommendationResponse> getNearbyByCoordinates(Long userId, double lat, double lng, double radiusKm, int limit) {
+        List<City> nearby = cityRepository.findNearbyCitiesByCoordinates(lat, lng, radiusKm);
+
+        double[] userVector = userId != null
+                ? preferencesRepository.findByUserId(userId).map(UserPreferences::toVector).orElse(null)
+                : null;
+
+        return nearby.stream()
+                .map(city -> {
+                    double distance = haversineDistance(lat, lng, city.getLatitude(), city.getLongitude());
+                    double proximityScore = 1.0 - (distance / radiusKm);
+
+                    double finalScore;
+                    if (userVector != null) {
+                        double similarity = cosineSimilarity(userVector, city.toVector());
+                        finalScore = similarity * 0.6 + proximityScore * 0.4;
+                    } else {
+                        finalScore = proximityScore;
+                    }
+
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(Math.round(finalScore * 1000.0) / 1000.0)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+
 
     @Transactional
     public void updatePreferences(User user, Rating rating) {
@@ -156,6 +242,20 @@ public class RecommendationService {
         double expected = currentWeight * cityAttribute;
         double newWeight = currentWeight + LEARNING_RATE * (normalizedRating - expected) * cityAttribute;
         return (float) Math.max(0.0, Math.min(1.0, newWeight));
+    }
+
+    private double applyContextPenalties(double score, City seed, City candidate) {
+        if (seed.getCityType() != candidate.getCityType()) {
+            score *= CITY_TYPE_PENALTY;
+        }
+        if (seed.getClimateType() != candidate.getClimateType()) {
+            score *= CLIMATE_PENALTY;
+        }
+        if (seed.getCountry() != null && candidate.getCountry() != null
+                && seed.getCountry().getContinent() != candidate.getCountry().getContinent()) {
+            score *= CONTINENT_PENALTY;
+        }
+        return score;
     }
 
     public static double cosineSimilarity(double[] a, double[] b) {

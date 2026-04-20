@@ -52,5 +52,13 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
     @Query("SELECT AVG(r.overallScore) FROM Rating r WHERE r.city.id = :cityId")
     Optional<Double> avgOverallScoreByCityId(@Param("cityId") Long cityId);
 
+    @Query("""
+        SELECT r FROM Rating r
+        WHERE r.user.id = :userId AND r.overallScore >= :minScore
+        ORDER BY r.createdAt DESC
+    """)
+    List<Rating> findRecentPositiveByUserId(@Param("userId") Long userId,
+                                            @Param("minScore") int minScore);
+
     long countByCityId(Long cityId);
 }

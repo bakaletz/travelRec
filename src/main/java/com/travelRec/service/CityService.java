@@ -140,13 +140,25 @@ public class CityService {
                 ratingRepository.avgShoppingRatingByCityId(cityId), baseWeight, userWeight));
 
         city.setRatingCount((int) count);
-        cityRepository.save(city);
     }
 
     private Float blendScore(Float baseScore, java.util.Optional<Double> avgRating, double baseWeight, double userWeight) {
         if (avgRating.isEmpty()) return baseScore;
         double normalizedRating = (avgRating.get() - 1.0) / 4.0;
         return (float) (baseScore * baseWeight + normalizedRating * userWeight);
+    }
+
+    @Transactional
+    public void incrementPopularity(Long cityId) {
+        City city = findCityOrThrow(cityId);
+        city.setPopularity(city.getPopularity() + 1.0f);
+    }
+
+    @Transactional
+    public void decrementPopularity(Long cityId) {
+        City city = findCityOrThrow(cityId);
+        float updated = city.getPopularity() - 1.0f;
+        city.setPopularity(Math.max(0.0f, updated));
     }
 
     public City findCityOrThrow(Long id) {

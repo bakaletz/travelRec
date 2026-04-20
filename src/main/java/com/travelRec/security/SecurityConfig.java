@@ -37,7 +37,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/countries/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cities/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/recommendations/popular").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/recommendations/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/countries/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/countries/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/countries/**").hasRole("ADMIN")
