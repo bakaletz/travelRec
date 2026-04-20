@@ -12,19 +12,13 @@ import com.travelRec.mapper.CityMapper;
 import com.travelRec.repository.CityRepository;
 import com.travelRec.repository.RatingRepository;
 import com.travelRec.repository.UserPreferencesRepository;
-import com.travelRec.util.ContextDistance;
-import com.travelRec.util.VectorMath;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,15 +31,12 @@ public class RecommendationService {
     private final CityMapper cityMapper;
     private final RatingRepository ratingRepository;
 
-    private static final double BASE_LEARNING_RATE = 0.1;
+    private static final double LEARNING_RATE = 0.1;
     private static final double PENALTY_MULTIPLIER = 0.85;
-    private static final double MAX_CITY_TYPE_PENALTY = 0.20;
-    private static final double MAX_CLIMATE_PENALTY = 0.25;
-    private static final double MAX_CONTINENT_PENALTY = 0.30;
+    private static final double CITY_TYPE_PENALTY = 0.70;
+    private static final double CLIMATE_PENALTY = 0.80;
+    private static final double CONTINENT_PENALTY = 0.50;
     private static final int POSITIVE_RATING_THRESHOLD = 4;
-    private static final int SEED_CANDIDATE_POOL_SIZE = 10;
-    private static final double NEARBY_SIMILARITY_WEIGHT = 0.6;
-    private static final double NEARBY_PROXIMITY_WEIGHT = 0.4;
 
     public List<RecommendationResponse> getPersonalized(Long userId, int limit,
                                                         List<Continent> continent,
@@ -54,13 +45,15 @@ public class RecommendationService {
         UserPreferences prefs = preferencesRepository.findByUserId(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Preferences not found for user: " + userId));
 
-        List<City> cities = applyFilters(cityRepository.findAllWithCountry(), continent, cityType, climateType);
+        List<City> cities = cityRepository.findAll();
+
+        cities = applyFilters(cities, continent, cityType, climateType);
 
         double[] userVector = prefs.toVector();
 
         return cities.stream()
                 .map(city -> {
-                    double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+                    double score = cosineSimilarity(userVector, city.toVector());
 
                     if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
                         score *= PENALTY_MULTIPLIER;
@@ -71,7 +64,7 @@ public class RecommendationService {
 
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
-                            .similarityScore(VectorMath.round3(score))
+                            .similarityScore(Math.round(score * 1000.0) / 1000.0)
                             .build();
                 })
                 .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
@@ -92,25 +85,48 @@ public class RecommendationService {
         City origin = cityRepository.findById(cityId)
                 .orElseThrow(() -> new EntityNotFoundException("City not found with id: " + cityId));
 
-        return computeSimilarTo(origin, Set.of(origin.getId()), limit, null);
+        double[] originVector = origin.toVector();
+
+        return cityRepository.findAll().stream()
+                .filter(city -> !city.getId().equals(cityId))
+                .map(city -> {
+                    double similarity = cosineSimilarity(originVector, city.toVector());
+                    similarity = applyContextPenalties(similarity, origin, city);
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(Math.round(similarity * 1000.0) / 1000.0)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     public List<RecommendationResponse> getBecauseYouLiked(Long userId, int limit) {
-        List<Rating> positiveRatings = ratingRepository.findRecentPositiveByUserIdWithCity(
-                userId, POSITIVE_RATING_THRESHOLD, PageRequest.of(0, SEED_CANDIDATE_POOL_SIZE));
-
+        List<Rating> positiveRatings = ratingRepository.findRecentPositiveByUserId(userId, POSITIVE_RATING_THRESHOLD);
         if (positiveRatings.isEmpty()) {
             return List.of();
         }
 
-        Rating seedRating = pickWeightedRandomSeed(positiveRatings);
-        City seed = seedRating.getCity();
+        City seed = positiveRatings.get(0).getCity();
+        double[] seedVector = seed.toVector();
+        String seedName = seed.getName();
+        String reason = "Because you liked " + seedName;
 
-        Set<Long> excludeCityIds = new HashSet<>(ratingRepository.findRatedCityIdsByUserId(userId));
-        excludeCityIds.add(seed.getId());
-
-        String reason = "Because you liked " + seed.getName();
-        return computeSimilarTo(seed, excludeCityIds, limit, reason);
+        return cityRepository.findAll().stream()
+                .filter(city -> !city.getId().equals(seed.getId()))
+                .map(city -> {
+                    double similarity = cosineSimilarity(seedVector, city.toVector());
+                    similarity = applyContextPenalties(similarity, seed, city);
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(Math.round(similarity * 1000.0) / 1000.0)
+                            .reason(reason)
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     public List<RecommendationResponse> getNearbyRecommendations(Long userId, Long cityId, double radiusKm, int limit) {
@@ -126,16 +142,15 @@ public class RecommendationService {
 
         return nearby.stream()
                 .map(city -> {
-                    double similarity = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
-                    double distance = VectorMath.haversineDistance(origin.getLatitude(), origin.getLongitude(),
+                    double similarity = cosineSimilarity(userVector, city.toVector());
+                    double distance = haversineDistance(origin.getLatitude(), origin.getLongitude(),
                             city.getLatitude(), city.getLongitude());
-                    double proximityScore = Math.max(0.0, 1.0 - (distance / radiusKm));
-                    double finalScore = similarity * NEARBY_SIMILARITY_WEIGHT + proximityScore * NEARBY_PROXIMITY_WEIGHT;
+                    double proximityScore = 1.0 - (distance / radiusKm);
+                    double finalScore = similarity * 0.6 + proximityScore * 0.4;
 
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
-                            .similarityScore(VectorMath.round3(finalScore))
-                            .distanceKm(VectorMath.round3(distance))
+                            .similarityScore(Math.round(finalScore * 1000.0) / 1000.0)
                             .build();
                 })
                 .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
@@ -152,27 +167,28 @@ public class RecommendationService {
 
         return nearby.stream()
                 .map(city -> {
-                    double distance = VectorMath.haversineDistance(lat, lng, city.getLatitude(), city.getLongitude());
-                    double proximityScore = Math.max(0.0, 1.0 - (distance / radiusKm));
+                    double distance = haversineDistance(lat, lng, city.getLatitude(), city.getLongitude());
+                    double proximityScore = 1.0 - (distance / radiusKm);
 
                     double finalScore;
                     if (userVector != null) {
-                        double similarity = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
-                        finalScore = similarity * NEARBY_SIMILARITY_WEIGHT + proximityScore * NEARBY_PROXIMITY_WEIGHT;
+                        double similarity = cosineSimilarity(userVector, city.toVector());
+                        finalScore = similarity * 0.6 + proximityScore * 0.4;
                     } else {
                         finalScore = proximityScore;
                     }
 
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
-                            .similarityScore(VectorMath.round3(finalScore))
-                            .distanceKm(VectorMath.round3(distance))
+                            .similarityScore(Math.round(finalScore * 1000.0) / 1000.0)
                             .build();
                 })
                 .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
                 .limit(limit)
                 .collect(Collectors.toList());
     }
+
+
 
     @Transactional
     public void updatePreferences(User user, Rating rating) {
@@ -181,113 +197,101 @@ public class RecommendationService {
 
         if (prefs == null || !rating.isDetailed()) return;
 
+        City city = rating.getCity();
+        double[] cityVector = city.toVector();
+
         if (rating.getCultureRating() != null) {
-            prefs.setCultureWeight(VectorMath.adaptiveEma(prefs.getCultureWeight(),
-                    Rating.normalize(rating.getCultureRating()), prefs.getCultureRatingCount(), BASE_LEARNING_RATE));
-            prefs.setCultureRatingCount(prefs.getCultureRatingCount() + 1);
+            prefs.setCultureWeight(adjustWeight(prefs.getCultureWeight(),
+                    Rating.normalize(rating.getCultureRating()), cityVector[0]));
         }
         if (rating.getFoodRating() != null) {
-            prefs.setFoodWeight(VectorMath.adaptiveEma(prefs.getFoodWeight(),
-                    Rating.normalize(rating.getFoodRating()), prefs.getFoodRatingCount(), BASE_LEARNING_RATE));
-            prefs.setFoodRatingCount(prefs.getFoodRatingCount() + 1);
+            prefs.setFoodWeight(adjustWeight(prefs.getFoodWeight(),
+                    Rating.normalize(rating.getFoodRating()), cityVector[1]));
         }
         if (rating.getNightlifeRating() != null) {
-            prefs.setNightlifeWeight(VectorMath.adaptiveEma(prefs.getNightlifeWeight(),
-                    Rating.normalize(rating.getNightlifeRating()), prefs.getNightlifeRatingCount(), BASE_LEARNING_RATE));
-            prefs.setNightlifeRatingCount(prefs.getNightlifeRatingCount() + 1);
+            prefs.setNightlifeWeight(adjustWeight(prefs.getNightlifeWeight(),
+                    Rating.normalize(rating.getNightlifeRating()), cityVector[2]));
         }
         if (rating.getNatureRating() != null) {
-            prefs.setNatureWeight(VectorMath.adaptiveEma(prefs.getNatureWeight(),
-                    Rating.normalize(rating.getNatureRating()), prefs.getNatureRatingCount(), BASE_LEARNING_RATE));
-            prefs.setNatureRatingCount(prefs.getNatureRatingCount() + 1);
+            prefs.setNatureWeight(adjustWeight(prefs.getNatureWeight(),
+                    Rating.normalize(rating.getNatureRating()), cityVector[3]));
         }
         if (rating.getSafetyRating() != null) {
-            prefs.setSafetyWeight(VectorMath.adaptiveEma(prefs.getSafetyWeight(),
-                    Rating.normalize(rating.getSafetyRating()), prefs.getSafetyRatingCount(), BASE_LEARNING_RATE));
-            prefs.setSafetyRatingCount(prefs.getSafetyRatingCount() + 1);
+            prefs.setSafetyWeight(adjustWeight(prefs.getSafetyWeight(),
+                    Rating.normalize(rating.getSafetyRating()), cityVector[4]));
         }
         if (rating.getCostRating() != null) {
-            prefs.setBudgetWeight(VectorMath.adaptiveEma(prefs.getBudgetWeight(),
-                    Rating.normalize(rating.getCostRating()), prefs.getBudgetRatingCount(), BASE_LEARNING_RATE));
-            prefs.setBudgetRatingCount(prefs.getBudgetRatingCount() + 1);
+            prefs.setBudgetWeight(adjustWeight(prefs.getBudgetWeight(),
+                    Rating.normalize(rating.getCostRating()), cityVector[5]));
         }
         if (rating.getBeachRating() != null) {
-            prefs.setBeachWeight(VectorMath.adaptiveEma(prefs.getBeachWeight(),
-                    Rating.normalize(rating.getBeachRating()), prefs.getBeachRatingCount(), BASE_LEARNING_RATE));
-            prefs.setBeachRatingCount(prefs.getBeachRatingCount() + 1);
+            prefs.setBeachWeight(adjustWeight(prefs.getBeachWeight(),
+                    Rating.normalize(rating.getBeachRating()), cityVector[6]));
         }
         if (rating.getArchitectureRating() != null) {
-            prefs.setArchitectureWeight(VectorMath.adaptiveEma(prefs.getArchitectureWeight(),
-                    Rating.normalize(rating.getArchitectureRating()), prefs.getArchitectureRatingCount(), BASE_LEARNING_RATE));
-            prefs.setArchitectureRatingCount(prefs.getArchitectureRatingCount() + 1);
+            prefs.setArchitectureWeight(adjustWeight(prefs.getArchitectureWeight(),
+                    Rating.normalize(rating.getArchitectureRating()), cityVector[7]));
         }
         if (rating.getShoppingRating() != null) {
-            prefs.setShoppingWeight(VectorMath.adaptiveEma(prefs.getShoppingWeight(),
-                    Rating.normalize(rating.getShoppingRating()), prefs.getShoppingRatingCount(), BASE_LEARNING_RATE));
-            prefs.setShoppingRatingCount(prefs.getShoppingRatingCount() + 1);
+            prefs.setShoppingWeight(adjustWeight(prefs.getShoppingWeight(),
+                    Rating.normalize(rating.getShoppingRating()), cityVector[8]));
         }
     }
 
-    private List<RecommendationResponse> computeSimilarTo(City seed, Set<Long> excludeIds, int limit, String reason) {
-        double[] seedVector = seed.toVector();
-
-        return cityRepository.findAllWithCountry().stream()
-                .filter(city -> !excludeIds.contains(city.getId()))
-                .map(city -> {
-                    double similarity = VectorMath.centeredCosineSimilarity(seedVector, city.toVector());
-                    similarity = applyContextPenalties(similarity, seed, city);
-                    RecommendationResponse.RecommendationResponseBuilder builder = RecommendationResponse.builder()
-                            .city(cityMapper.toResponse(city))
-                            .similarityScore(VectorMath.round3(similarity));
-                    if (reason != null) {
-                        builder.reason(reason);
-                    }
-                    return builder.build();
-                })
-                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
-                .limit(limit)
-                .collect(Collectors.toList());
-    }
-
-    private Rating pickWeightedRandomSeed(List<Rating> candidates) {
-        double totalWeight = 0.0;
-        for (Rating r : candidates) {
-            totalWeight += r.getOverallScore();
-        }
-
-        double pick = ThreadLocalRandom.current().nextDouble() * totalWeight;
-        double running = 0.0;
-        for (Rating r : candidates) {
-            running += r.getOverallScore();
-            if (running >= pick) {
-                return r;
-            }
-        }
-        return candidates.get(candidates.size() - 1);
+    private float adjustWeight(float currentWeight, double normalizedRating, double cityAttribute) {
+        double expected = currentWeight * cityAttribute;
+        double newWeight = currentWeight + LEARNING_RATE * (normalizedRating - expected) * cityAttribute;
+        return (float) Math.max(0.0, Math.min(1.0, newWeight));
     }
 
     private double applyContextPenalties(double score, City seed, City candidate) {
-        double cityTypeDist = ContextDistance.cityTypeDistance(seed.getCityType(), candidate.getCityType());
-        score *= (1.0 - MAX_CITY_TYPE_PENALTY * cityTypeDist);
+        if (seed.getCityType() != candidate.getCityType()) {
+            score *= CITY_TYPE_PENALTY;
+        }
+        if (seed.getClimateType() != candidate.getClimateType()) {
+            score *= CLIMATE_PENALTY;
+        }
+        if (seed.getCountry() != null && candidate.getCountry() != null
+                && seed.getCountry().getContinent() != candidate.getCountry().getContinent()) {
+            score *= CONTINENT_PENALTY;
+        }
+        return score;
+    }
 
-        double climateDist = ContextDistance.climateDistance(seed.getClimateType(), candidate.getClimateType());
-        score *= (1.0 - MAX_CLIMATE_PENALTY * climateDist);
+    public static double cosineSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) throw new IllegalArgumentException("Vectors must have same length");
 
-        if (seed.getCountry() != null && candidate.getCountry() != null) {
-            double continentDist = ContextDistance.continentDistance(
-                    seed.getCountry().getContinent(), candidate.getCountry().getContinent());
-            score *= (1.0 - MAX_CONTINENT_PENALTY * continentDist);
+        double dotProduct = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+
+        for (int i = 0; i < a.length; i++) {
+            dotProduct += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
         }
 
-        return score;
+        if (normA == 0.0 || normB == 0.0) return 0.0;
+
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    public static double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     private List<City> applyFilters(List<City> cities, List<Continent> continents,
                                     List<CityType> cityTypes, List<ClimateType> climateTypes) {
         if (continents != null && !continents.isEmpty()) {
-            Set<Continent> expanded = expandContinents(continents);
             cities = cities.stream()
-                    .filter(c -> expanded.contains(c.getCountry().getContinent()))
+                    .filter(c -> continents.contains(c.getCountry().getContinent()))
                     .collect(Collectors.toList());
         }
 
@@ -303,21 +307,5 @@ public class RecommendationService {
                     .collect(Collectors.toList());
         }
         return cities;
-    }
-
-    private Set<Continent> expandContinents(List<Continent> selected) {
-        Set<Continent> expanded = new HashSet<>(selected);
-        for (Continent c : selected) {
-            switch (c) {
-                case EUROPE -> expanded.add(Continent.EUROPE_ASIA);
-                case ASIA -> {
-                    expanded.add(Continent.EUROPE_ASIA);
-                    expanded.add(Continent.AFRICA_ASIA);
-                }
-                case AFRICA -> expanded.add(Continent.AFRICA_ASIA);
-                default -> { }
-            }
-        }
-        return expanded;
     }
 }
