@@ -1,8 +1,6 @@
 package com.travelRec.repository;
 
 import com.travelRec.entity.Rating;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -61,19 +59,6 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
     """)
     List<Rating> findRecentPositiveByUserId(@Param("userId") Long userId,
                                             @Param("minScore") int minScore);
-
-    @EntityGraph(attributePaths = {"city", "city.country"})
-    @Query("""
-        SELECT r FROM Rating r
-        WHERE r.user.id = :userId AND r.overallScore >= :minScore
-        ORDER BY r.createdAt DESC
-    """)
-    List<Rating> findRecentPositiveByUserIdWithCity(@Param("userId") Long userId,
-                                                    @Param("minScore") int minScore,
-                                                    Pageable pageable);
-
-    @Query("SELECT r.city.id FROM Rating r WHERE r.user.id = :userId")
-    List<Long> findRatedCityIdsByUserId(@Param("userId") Long userId);
 
     long countByCityId(Long cityId);
 }
