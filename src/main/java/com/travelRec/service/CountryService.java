@@ -39,6 +39,12 @@ public class CountryService {
                 .collect(Collectors.toList());
     }
 
+    public List<CountryResponse> searchCountries(String query) {
+        return countryRepository.searchByNameOrCode(query).stream()
+                .map(countryMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public CountryResponse createCountry(CountryRequest request) {
         if (countryRepository.existsByName(request.getName())) {

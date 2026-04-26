@@ -12,6 +12,7 @@ import com.travelRec.entity.enums.TripStatus;
 import com.travelRec.mapper.TripMapper;
 import com.travelRec.repository.TripCityRepository;
 import com.travelRec.repository.TripRepository;
+import com.travelRec.util.VectorMath;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -186,7 +187,7 @@ public class TripService {
             double minDist = Double.MAX_VALUE;
 
             for (TripCity candidate : cities) {
-                double dist = RecommendationService.haversineDistance(
+                double dist = VectorMath.haversineDistance(
                         last.getCity().getLatitude(), last.getCity().getLongitude(),
                         candidate.getCity().getLatitude(), candidate.getCity().getLongitude());
                 if (dist < minDist) {
@@ -240,7 +241,7 @@ public class TripService {
             TripCityResponse curr = cities.get(i);
 
             if (prev.getLatitude() != null && curr.getLatitude() != null) {
-                double dist = RecommendationService.haversineDistance(
+                double dist = VectorMath.haversineDistance(
                         prev.getLatitude(), prev.getLongitude(),
                         curr.getLatitude(), curr.getLongitude());
                 curr.setDistanceFromPrevious(Math.round(dist * 10.0) / 10.0);
@@ -254,13 +255,13 @@ public class TripService {
             TripCityResponse next = cities.get(i + 1);
 
             if (prev.getLatitude() != null && curr.getLatitude() != null && next.getLatitude() != null) {
-                double detour = RecommendationService.haversineDistance(
+                double detour = VectorMath.haversineDistance(
                         prev.getLatitude(), prev.getLongitude(),
                         curr.getLatitude(), curr.getLongitude())
-                        + RecommendationService.haversineDistance(
+                        + VectorMath.haversineDistance(
                         curr.getLatitude(), curr.getLongitude(),
                         next.getLatitude(), next.getLongitude());
-                double direct = RecommendationService.haversineDistance(
+                double direct = VectorMath.haversineDistance(
                         prev.getLatitude(), prev.getLongitude(),
                         next.getLatitude(), next.getLongitude());
 

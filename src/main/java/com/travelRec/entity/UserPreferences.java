@@ -52,6 +52,42 @@ public class UserPreferences {
     @Builder.Default
     private Float shoppingWeight = 0.5f;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer cultureRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer foodRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer nightlifeRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer natureRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer safetyRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer budgetRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer beachRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer architectureRatingCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer shoppingRatingCount = 0;
+
     @ElementCollection(targetClass = CityType.class, fetch = FetchType.EAGER)
     @CollectionTable(name = "user_preferred_city_types", joinColumns = @JoinColumn(name = "preferences_id"))
     @Enumerated(EnumType.STRING)

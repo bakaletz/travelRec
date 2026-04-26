@@ -11,4 +11,5 @@ public class RecommendationResponse {
     private CityResponse city;
     private Double similarityScore;
     private String reason;
+    private Double distanceKm;
 }
