@@ -285,8 +285,9 @@ public class RecommendationService {
     private List<City> applyFilters(List<City> cities, List<Continent> continents,
                                     List<CityType> cityTypes, List<ClimateType> climateTypes) {
         if (continents != null && !continents.isEmpty()) {
+            Set<Continent> expanded = expandContinents(continents);
             cities = cities.stream()
-                    .filter(c -> continents.contains(c.getCountry().getContinent()))
+                    .filter(c -> expanded.contains(c.getCountry().getContinent()))
                     .collect(Collectors.toList());
         }
 
@@ -302,5 +303,21 @@ public class RecommendationService {
                     .collect(Collectors.toList());
         }
         return cities;
+    }
+
+    private Set<Continent> expandContinents(List<Continent> selected) {
+        Set<Continent> expanded = new HashSet<>(selected);
+        for (Continent c : selected) {
+            switch (c) {
+                case EUROPE -> expanded.add(Continent.EUROPE_ASIA);
+                case ASIA -> {
+                    expanded.add(Continent.EUROPE_ASIA);
+                    expanded.add(Continent.AFRICA_ASIA);
+                }
+                case AFRICA -> expanded.add(Continent.AFRICA_ASIA);
+                default -> { }
+            }
+        }
+        return expanded;
     }
 }
