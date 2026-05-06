@@ -53,7 +53,7 @@ class CityServiceTest {
                 .id(1L).name("Hungary").code("HU").continent(Continent.EUROPE).build();
 
         city = City.builder()
-                .id(1L).country(country).name("Budapest")
+                .id(1L).country(country).name("Budapest").region("Central Hungary")
                 .cityType(CityType.LARGE_CITY).climateType(ClimateType.CONTINENTAL)
                 .latitude(47.5).longitude(19.0)
                 .baseCultureScore(0.85f).baseFoodScore(0.8f).baseNightlifeScore(0.9f)
@@ -68,12 +68,36 @@ class CityServiceTest {
     }
 
     @Nested
+    @DisplayName("getAllCities()")
+    class GetAllCities {
+
+        @Test
+        @DisplayName("should return all cities")
+        void shouldReturnAll() {
+            when(cityRepository.findAll()).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getAllCities();
+
+            assertEquals(1, result.size());
+            assertEquals("Budapest", result.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should return empty list")
+        void shouldReturnEmpty() {
+            when(cityRepository.findAll()).thenReturn(List.of());
+
+            assertTrue(cityService.getAllCities().isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("getCityById()")
     class GetCityById {
 
         @Test
-        @DisplayName("should return city response")
-        void shouldReturnCity() {
+        @DisplayName("should return city")
+        void shouldReturn() {
             when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
 
             CityResponse response = cityService.getCityById(1L);
@@ -83,11 +107,118 @@ class CityServiceTest {
         }
 
         @Test
-        @DisplayName("should throw when city not found")
-        void shouldThrowWhenNotFound() {
+        @DisplayName("should throw when not found")
+        void shouldThrow() {
             when(cityRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> cityService.getCityById(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("getCitiesByCountry()")
+    class GetCitiesByCountry {
+
+        @Test
+        @DisplayName("should return cities for country")
+        void shouldReturn() {
+            when(cityRepository.findByCountryId(1L)).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getCitiesByCountry(1L);
+
+            assertEquals(1, result.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("getCitiesByContinent()")
+    class GetCitiesByContinent {
+
+        @Test
+        @DisplayName("should return cities for continent")
+        void shouldReturn() {
+            when(cityRepository.findByCountryContinent(Continent.EUROPE)).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getCitiesByContinent(Continent.EUROPE);
+
+            assertEquals(1, result.size());
+        }
+
+        @Test
+        @DisplayName("should return empty for unknown continent")
+        void shouldReturnEmpty() {
+            when(cityRepository.findByCountryContinent(Continent.ANTARCTICA)).thenReturn(List.of());
+
+            assertTrue(cityService.getCitiesByContinent(Continent.ANTARCTICA).isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("getCitiesByCityType()")
+    class GetCitiesByCityType {
+
+        @Test
+        @DisplayName("should return cities for type")
+        void shouldReturn() {
+            when(cityRepository.findByCityType(CityType.LARGE_CITY)).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getCitiesByCityType(CityType.LARGE_CITY);
+
+            assertEquals(1, result.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("getCitiesByClimateType()")
+    class GetCitiesByClimateType {
+
+        @Test
+        @DisplayName("should return cities for climate")
+        void shouldReturn() {
+            when(cityRepository.findByClimateType(ClimateType.CONTINENTAL)).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getCitiesByClimateType(ClimateType.CONTINENTAL);
+
+            assertEquals(1, result.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("searchCities()")
+    class SearchCities {
+
+        @Test
+        @DisplayName("should return cities matching query")
+        void shouldReturn() {
+            when(cityRepository.searchByNameOrRegion("buda")).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.searchCities("buda");
+
+            assertEquals(1, result.size());
+            assertEquals("Budapest", result.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should return empty for non-matching query")
+        void shouldReturnEmpty() {
+            when(cityRepository.searchByNameOrRegion("xyz")).thenReturn(List.of());
+
+            assertTrue(cityService.searchCities("xyz").isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("getPopularCities()")
+    class GetPopularCities {
+
+        @Test
+        @DisplayName("should return top popular cities")
+        void shouldReturn() {
+            when(cityRepository.findTopByPopularity(5)).thenReturn(List.of(city));
+
+            List<CityResponse> result = cityService.getPopularCities(5);
+
+            assertEquals(1, result.size());
         }
     }
 
@@ -112,6 +243,104 @@ class CityServiceTest {
             when(cityRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> cityService.getNearbyCities(99L, 300.0));
+        }
+    }
+
+    @Nested
+    @DisplayName("getCitiesInSameCountry()")
+    class GetCitiesInSameCountry {
+
+        @Test
+        @DisplayName("should return other cities of same country")
+        void shouldReturn() {
+            City other = City.builder()
+                    .id(2L).country(country).name("Debrecen")
+                    .cityType(CityType.MEDIUM_CITY).climateType(ClimateType.CONTINENTAL)
+                    .build();
+
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
+            when(cityRepository.findByCountryIdExcluding(1L, 1L)).thenReturn(List.of(other));
+
+            List<CityResponse> result = cityService.getCitiesInSameCountry(1L);
+
+            assertEquals(1, result.size());
+            assertEquals("Debrecen", result.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should throw when origin city not found")
+        void shouldThrow() {
+            when(cityRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> cityService.getCitiesInSameCountry(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("createCity()")
+    class CreateCity {
+
+        @Test
+        @DisplayName("should create and return city")
+        void shouldCreate() {
+            CityRequest request = CityRequest.builder()
+                    .countryId(1L).name("Vienna")
+                    .cityType(CityType.LARGE_CITY).climateType(ClimateType.CONTINENTAL)
+                    .latitude(48.2).longitude(16.37)
+                    .baseCultureScore(0.9f).baseFoodScore(0.7f).baseNightlifeScore(0.6f)
+                    .baseNatureScore(0.7f).baseSafetyScore(0.9f).baseCostLevel(0.7f)
+                    .baseBeachScore(0.05f).baseArchitectureScore(0.95f).baseShoppingScore(0.7f)
+                    .publicTransportScore(0.9f).walkabilityScore(0.85f)
+                    .build();
+
+            when(countryService.findCountryOrThrow(1L)).thenReturn(country);
+            when(cityRepository.save(any(City.class))).thenAnswer(inv -> {
+                City c = inv.getArgument(0);
+                c.setId(2L);
+                return c;
+            });
+
+            CityResponse response = cityService.createCity(request);
+
+            assertEquals("Vienna", response.getName());
+            verify(cityRepository).save(any(City.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("updateCity()")
+    class UpdateCity {
+
+        @Test
+        @DisplayName("should update city via dirty checking")
+        void shouldUpdate() {
+            CityRequest request = CityRequest.builder()
+                    .name("Buda")
+                    .cityType(CityType.MEDIUM_CITY)
+                    .climateType(ClimateType.CONTINENTAL)
+                    .latitude(47.5).longitude(19.0)
+                    .baseCultureScore(0.85f).baseFoodScore(0.8f).baseNightlifeScore(0.9f)
+                    .baseNatureScore(0.6f).baseSafetyScore(0.7f).baseCostLevel(0.35f)
+                    .baseBeachScore(0.15f).baseArchitectureScore(0.9f).baseShoppingScore(0.5f)
+                    .publicTransportScore(0.8f).walkabilityScore(0.7f)
+                    .build();
+
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
+
+            CityResponse response = cityService.updateCity(1L, request);
+
+            assertEquals("Buda", response.getName());
+            assertEquals(CityType.MEDIUM_CITY, city.getCityType());
+            verify(cityRepository, never()).save(any(City.class));
+        }
+
+        @Test
+        @DisplayName("should throw when city not found")
+        void shouldThrow() {
+            CityRequest request = CityRequest.builder().name("X").build();
+            when(cityRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> cityService.updateCity(99L, request));
         }
     }
 
@@ -150,7 +379,6 @@ class CityServiceTest {
 
             assertNotEquals(0.85f, city.getCultureScore());
             assertEquals(20, city.getRatingCount());
-            verify(cityRepository).save(city);
         }
 
         @Test
@@ -175,11 +403,11 @@ class CityServiceTest {
         }
 
         @Test
-        @DisplayName("should increase user weight with more ratings")
-        void shouldIncreaseUserWeight() {
+        @DisplayName("should cap user weight at 0.6 with many ratings")
+        void shouldCapUserWeight() {
             when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
-            when(ratingRepository.countByCityId(1L)).thenReturn(100L);
-            when(ratingRepository.avgCultureRatingByCityId(1L)).thenReturn(Optional.of(2.0));
+            when(ratingRepository.countByCityId(1L)).thenReturn(1000L);
+            when(ratingRepository.avgCultureRatingByCityId(1L)).thenReturn(Optional.of(1.0));
             when(ratingRepository.avgFoodRatingByCityId(1L)).thenReturn(Optional.empty());
             when(ratingRepository.avgNightlifeRatingByCityId(1L)).thenReturn(Optional.empty());
             when(ratingRepository.avgNatureRatingByCityId(1L)).thenReturn(Optional.empty());
@@ -189,48 +417,68 @@ class CityServiceTest {
             when(ratingRepository.avgArchitectureRatingByCityId(1L)).thenReturn(Optional.empty());
             when(ratingRepository.avgShoppingRatingByCityId(1L)).thenReturn(Optional.empty());
 
-            float scoreBefore = city.getCultureScore();
             cityService.recalculateScores(1L);
-            float scoreAfter100 = city.getCultureScore();
 
-            assertTrue(scoreAfter100 < scoreBefore);
+            // base=0.85 with weight 0.4, normalized rating=0.0 with weight 0.6 -> 0.34
+            // not 0.0 because base still has 40% weight (cap)
+            assertTrue(city.getCultureScore() > 0.3f && city.getCultureScore() < 0.4f);
         }
     }
 
     @Nested
-    @DisplayName("createCity()")
-    class CreateCity {
+    @DisplayName("incrementPopularity()")
+    class IncrementPopularity {
 
         @Test
-        @DisplayName("should create and return city response")
-        void shouldCreateCity() {
-            CityRequest request = CityRequest.builder()
-                    .countryId(1L).name("Vienna")
-                    .cityType(CityType.LARGE_CITY).climateType(ClimateType.CONTINENTAL)
-                    .latitude(48.2).longitude(16.37)
-                    .baseCultureScore(0.9f).baseFoodScore(0.7f).baseNightlifeScore(0.6f)
-                    .baseNatureScore(0.7f).baseSafetyScore(0.9f).baseCostLevel(0.7f)
-                    .baseBeachScore(0.05f).baseArchitectureScore(0.95f).baseShoppingScore(0.7f)
-                    .publicTransportScore(0.9f).walkabilityScore(0.85f)
-                    .build();
+        @DisplayName("should increase popularity by 1.0")
+        void shouldIncrement() {
+            float oldPopularity = city.getPopularity();
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
 
-            when(countryService.findCountryOrThrow(1L)).thenReturn(country);
-            when(cityRepository.save(any(City.class))).thenAnswer(inv -> {
-                City c = inv.getArgument(0);
-                c.setId(2L);
-                return c;
-            });
+            cityService.incrementPopularity(1L);
 
-            CityResponse response = cityService.createCity(request);
+            assertEquals(oldPopularity + 1.0f, city.getPopularity());
+        }
 
-            assertEquals("Vienna", response.getName());
-            verify(cityRepository).save(any(City.class));
+        @Test
+        @DisplayName("should throw when city not found")
+        void shouldThrow() {
+            when(cityRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> cityService.incrementPopularity(99L));
         }
     }
 
     @Nested
-    @DisplayName("deleteCity()")
-    class DeleteCity {
+    @DisplayName("decrementPopularity()")
+    class DecrementPopularity {
+
+        @Test
+        @DisplayName("should decrease popularity by 1.0")
+        void shouldDecrement() {
+            city.setPopularity(5.0f);
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
+
+            cityService.decrementPopularity(1L);
+
+            assertEquals(4.0f, city.getPopularity());
+        }
+
+        @Test
+        @DisplayName("should not go below zero")
+        void shouldNotGoBelowZero() {
+            city.setPopularity(0.5f);
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
+
+            cityService.decrementPopularity(1L);
+
+            assertEquals(0.0f, city.getPopularity());
+        }
+    }
+
+    @Nested
+    @DisplayName("createCity() and deleteCity()")
+    class CreateAndDelete {
 
         @Test
         @DisplayName("should delete existing city")
@@ -243,11 +491,34 @@ class CityServiceTest {
         }
 
         @Test
-        @DisplayName("should throw when city not found")
-        void shouldThrowWhenNotFound() {
+        @DisplayName("should throw when city not found on delete")
+        void shouldThrowOnDelete() {
             when(cityRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> cityService.deleteCity(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("findCityOrThrow()")
+    class FindCityOrThrow {
+
+        @Test
+        @DisplayName("should return city when found")
+        void shouldReturn() {
+            when(cityRepository.findById(1L)).thenReturn(Optional.of(city));
+
+            City found = cityService.findCityOrThrow(1L);
+
+            assertEquals(city, found);
+        }
+
+        @Test
+        @DisplayName("should throw when not found")
+        void shouldThrow() {
+            when(cityRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> cityService.findCityOrThrow(99L));
         }
     }
 }

@@ -36,6 +36,20 @@ public class RecommendationController {
         return ResponseEntity.ok(recommendationService.getPopular(limit));
     }
 
+    @GetMapping("/similar")
+    public ResponseEntity<List<RecommendationResponse>> getSimilarCities(
+            @RequestParam Long cityId,
+            @RequestParam(defaultValue = "6") int limit) {
+        return ResponseEntity.ok(recommendationService.getSimilarCities(cityId, limit));
+    }
+
+    @GetMapping("/because-you-liked")
+    public ResponseEntity<List<RecommendationResponse>> getBecauseYouLiked(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(recommendationService.getBecauseYouLiked(user.getId(), limit));
+    }
+
     @GetMapping("/nearby")
     public ResponseEntity<List<RecommendationResponse>> getNearbyRecommendations(
             @AuthenticationPrincipal CustomUserDetails user,
@@ -43,5 +57,16 @@ public class RecommendationController {
             @RequestParam(defaultValue = "300") double radiusKm,
             @RequestParam(defaultValue = "10") int limit) {
         return ResponseEntity.ok(recommendationService.getNearbyRecommendations(user.getId(), cityId, radiusKm, limit));
+    }
+
+    @GetMapping("/nearby-me")
+    public ResponseEntity<List<RecommendationResponse>> getNearbyByCoordinates(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "500") double radiusKm,
+            @RequestParam(defaultValue = "10") int limit) {
+        Long userId = user != null ? user.getId() : null;
+        return ResponseEntity.ok(recommendationService.getNearbyByCoordinates(userId, lat, lng, radiusKm, limit));
     }
 }

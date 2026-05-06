@@ -21,7 +21,11 @@ public class CountryController {
 
     @GetMapping
     public ResponseEntity<List<CountryResponse>> getAllCountries(
-            @RequestParam(required = false) Continent continent) {
+            @RequestParam(required = false) Continent continent,
+            @RequestParam(required = false) String search) {
+        if (search != null) {
+            return ResponseEntity.ok(countryService.searchCountries(search));
+        }
         if (continent != null) {
             return ResponseEntity.ok(countryService.getCountriesByContinent(continent));
         }
@@ -40,7 +44,7 @@ public class CountryController {
 
     @PutMapping("/{id}")
     public ResponseEntity<CountryResponse> updateCountry(@PathVariable Long id,
-                                                          @Valid @RequestBody CountryRequest request) {
+                                                         @Valid @RequestBody CountryRequest request) {
         return ResponseEntity.ok(countryService.updateCountry(id, request));
     }
 

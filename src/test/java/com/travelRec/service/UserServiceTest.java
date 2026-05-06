@@ -2,6 +2,7 @@ package com.travelRec.service;
 
 import com.travelRec.dto.user.PreferencesRequest;
 import com.travelRec.dto.user.PreferencesResponse;
+import com.travelRec.dto.user.UpdateUserRequest;
 import com.travelRec.dto.user.UserResponse;
 import com.travelRec.entity.User;
 import com.travelRec.entity.UserPreferences;
@@ -143,7 +144,7 @@ class UserServiceTest {
     class UpdatePreferences {
 
         @Test
-        @DisplayName("should update existing preferences without explicit save (Dirty Checking)")
+        @DisplayName("should update existing preferences without explicit save (dirty checking)")
         void shouldUpdate() {
             PreferencesRequest request = PreferencesRequest.builder()
                     .cultureWeight(0.1f)
@@ -177,9 +178,96 @@ class UserServiceTest {
                 return p;
             });
 
-            PreferencesResponse response = userService.updatePreferences(1L, request);
+            userService.updatePreferences(1L, request);
 
             verify(preferencesRepository, atLeast(1)).save(any(UserPreferences.class));
+        }
+
+        @Test
+        @DisplayName("should throw when user not found while creating prefs")
+        void shouldThrowWhenUserNotFound() {
+            PreferencesRequest request = PreferencesRequest.builder().cultureWeight(0.7f).build();
+            when(preferencesRepository.findByUserId(99L)).thenReturn(Optional.empty());
+            when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class,
+                    () -> userService.updatePreferences(99L, request));
+        }
+    }
+
+    @Nested
+    @DisplayName("updateUser()")
+    class UpdateUser {
+
+        @Test
+        @DisplayName("should update only provided fields")
+        void shouldUpdateProvided() {
+            UpdateUserRequest request = new UpdateUserRequest();
+            request.setFirstName("Annette");
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserResponse response = userService.updateUser(1L, request);
+
+            assertEquals("Annette", response.getFirstName());
+            assertEquals("Shevchenko", response.getLastName());
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should update all fields when provided")
+        void shouldUpdateAll() {
+            UpdateUserRequest request = new UpdateUserRequest();
+            request.setFirstName("Annette");
+            request.setLastName("Petrenko");
+            request.setAvatarUrl("https://example.com/new-avatar.jpg");
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserResponse response = userService.updateUser(1L, request);
+
+            assertEquals("Annette", response.getFirstName());
+            assertEquals("Petrenko", response.getLastName());
+            assertEquals("https://example.com/new-avatar.jpg", response.getAvatarUrl());
+        }
+
+        @Test
+        @DisplayName("should set avatar to null when blank string provided")
+        void shouldSetAvatarNullForBlank() {
+            user.setAvatarUrl("https://example.com/old.jpg");
+            UpdateUserRequest request = new UpdateUserRequest();
+            request.setAvatarUrl("");
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserResponse response = userService.updateUser(1L, request);
+
+            assertNull(response.getAvatarUrl());
+        }
+
+        @Test
+        @DisplayName("should not change fields when null provided")
+        void shouldNotChangeOnNull() {
+            user.setAvatarUrl("https://example.com/old.jpg");
+            UpdateUserRequest request = new UpdateUserRequest();
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserResponse response = userService.updateUser(1L, request);
+
+            assertEquals("Anna", response.getFirstName());
+            assertEquals("Shevchenko", response.getLastName());
+            assertEquals("https://example.com/old.jpg", response.getAvatarUrl());
+        }
+
+        @Test
+        @DisplayName("should throw when user not found")
+        void shouldThrow() {
+            UpdateUserRequest request = new UpdateUserRequest();
+            request.setFirstName("X");
+            when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> userService.updateUser(99L, request));
         }
     }
 
@@ -203,6 +291,29 @@ class UserServiceTest {
             when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> userService.deleteUser(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("findUserOrThrow()")
+    class FindUserOrThrow {
+
+        @Test
+        @DisplayName("should return user when found")
+        void shouldReturn() {
+            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            User found = userService.findUserOrThrow(1L);
+
+            assertEquals(user, found);
+        }
+
+        @Test
+        @DisplayName("should throw when not found")
+        void shouldThrow() {
+            when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> userService.findUserOrThrow(99L));
         }
     }
 }

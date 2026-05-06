@@ -49,6 +49,30 @@ class CountryServiceTest {
     }
 
     @Nested
+    @DisplayName("getAllCountries()")
+    class GetAllCountries {
+
+        @Test
+        @DisplayName("should return all countries")
+        void shouldReturn() {
+            when(countryRepository.findAll()).thenReturn(List.of(country));
+
+            List<CountryResponse> result = countryService.getAllCountries();
+
+            assertEquals(1, result.size());
+            assertEquals("Ukraine", result.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should return empty list")
+        void shouldReturnEmpty() {
+            when(countryRepository.findAll()).thenReturn(List.of());
+
+            assertTrue(countryService.getAllCountries().isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("getCountryById()")
     class GetCountryById {
 
@@ -70,6 +94,54 @@ class CountryServiceTest {
             when(countryRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> countryService.getCountryById(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("getCountriesByContinent()")
+    class GetByContinent {
+
+        @Test
+        @DisplayName("should return filtered list")
+        void shouldFilter() {
+            when(countryRepository.findByContinent(Continent.EUROPE)).thenReturn(List.of(country));
+
+            List<CountryResponse> results = countryService.getCountriesByContinent(Continent.EUROPE);
+
+            assertEquals(1, results.size());
+            assertEquals("Ukraine", results.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should return empty list for no matches")
+        void shouldReturnEmpty() {
+            when(countryRepository.findByContinent(Continent.ANTARCTICA)).thenReturn(List.of());
+
+            assertTrue(countryService.getCountriesByContinent(Continent.ANTARCTICA).isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("searchCountries()")
+    class SearchCountries {
+
+        @Test
+        @DisplayName("should return search results")
+        void shouldReturn() {
+            when(countryRepository.searchByNameOrCode("ukr")).thenReturn(List.of(country));
+
+            List<CountryResponse> results = countryService.searchCountries("ukr");
+
+            assertEquals(1, results.size());
+            assertEquals("Ukraine", results.get(0).getName());
+        }
+
+        @Test
+        @DisplayName("should return empty for no matches")
+        void shouldReturnEmpty() {
+            when(countryRepository.searchByNameOrCode("xyz")).thenReturn(List.of());
+
+            assertTrue(countryService.searchCountries("xyz").isEmpty());
         }
     }
 
@@ -123,28 +195,32 @@ class CountryServiceTest {
     }
 
     @Nested
-    @DisplayName("getCountriesByContinent()")
-    class GetByContinent {
+    @DisplayName("updateCountry()")
+    class UpdateCountry {
 
         @Test
-        @DisplayName("should return filtered list")
-        void shouldFilter() {
-            when(countryRepository.findByContinent(Continent.EUROPE)).thenReturn(List.of(country));
+        @DisplayName("should update country via dirty checking")
+        void shouldUpdate() {
+            CountryRequest request = CountryRequest.builder()
+                    .name("Ukraine Updated")
+                    .code("UA").continent(Continent.EUROPE)
+                    .language("Ukrainian").currency("UAH").build();
 
-            List<CountryResponse> results = countryService.getCountriesByContinent(Continent.EUROPE);
+            when(countryRepository.findById(1L)).thenReturn(Optional.of(country));
 
-            assertEquals(1, results.size());
-            assertEquals("Ukraine", results.get(0).getName());
+            CountryResponse response = countryService.updateCountry(1L, request);
+
+            assertEquals("Ukraine Updated", response.getName());
+            verify(countryRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("should return empty for no matches")
-        void shouldReturnEmpty() {
-            when(countryRepository.findByContinent(Continent.ANTARCTICA)).thenReturn(List.of());
+        @DisplayName("should throw when country not found")
+        void shouldThrow() {
+            CountryRequest request = CountryRequest.builder().name("X").build();
+            when(countryRepository.findById(99L)).thenReturn(Optional.empty());
 
-            List<CountryResponse> results = countryService.getCountriesByContinent(Continent.ANTARCTICA);
-
-            assertTrue(results.isEmpty());
+            assertThrows(EntityNotFoundException.class, () -> countryService.updateCountry(99L, request));
         }
     }
 
@@ -168,6 +244,29 @@ class CountryServiceTest {
             when(countryRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class, () -> countryService.deleteCountry(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("findCountryOrThrow()")
+    class FindCountryOrThrow {
+
+        @Test
+        @DisplayName("should return country when found")
+        void shouldReturn() {
+            when(countryRepository.findById(1L)).thenReturn(Optional.of(country));
+
+            Country found = countryService.findCountryOrThrow(1L);
+
+            assertEquals(country, found);
+        }
+
+        @Test
+        @DisplayName("should throw when not found")
+        void shouldThrow() {
+            when(countryRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class, () -> countryService.findCountryOrThrow(99L));
         }
     }
 }

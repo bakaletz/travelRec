@@ -4,6 +4,7 @@ import com.travelRec.entity.City;
 import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +24,10 @@ public interface CityRepository extends JpaRepository<City, Long> {
     List<City> findByCountryContinent(Continent continent);
 
     List<City> findByRegion(String region);
+
+    @EntityGraph(attributePaths = {"country"})
+    @Query("SELECT c FROM City c")
+    List<City> findAllWithCountry();
 
     @Query("SELECT c FROM City c ORDER BY c.popularity DESC LIMIT :limit")
     List<City> findTopByPopularity(@Param("limit") int limit);
@@ -51,6 +56,23 @@ public interface CityRepository extends JpaRepository<City, Long> {
                                 @Param("lat") double lat,
                                 @Param("lng") double lng,
                                 @Param("radiusKm") double radiusKm);
+
+    @Query(value = """
+        SELECT * FROM (
+            SELECT c.*,
+                (6371 * acos(
+                    cos(radians(:lat)) * cos(radians(c.latitude)) *
+                    cos(radians(c.longitude) - radians(:lng)) +
+                    sin(radians(:lat)) * sin(radians(c.latitude))
+                )) AS distance
+            FROM cities c
+        ) AS nearby
+        WHERE distance <= :radiusKm
+        ORDER BY distance ASC
+        """, nativeQuery = true)
+    List<City> findNearbyCitiesByCoordinates(@Param("lat") double lat,
+                                             @Param("lng") double lng,
+                                             @Param("radiusKm") double radiusKm);
 
     @Query("SELECT c FROM City c WHERE c.country.id = :countryId AND c.id != :cityId")
     List<City> findByCountryIdExcluding(@Param("countryId") Long countryId,
