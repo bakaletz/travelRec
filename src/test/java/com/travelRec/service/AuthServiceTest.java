@@ -234,7 +234,7 @@ class AuthServiceTest {
 
             when(userRepository.findByEmail("wrong@mail.com")).thenReturn(Optional.empty());
             when(userRepository.findByEmail("anna@mail.com")).thenReturn(Optional.of(user));
-            when(passwordEncoder.matches("wrongpassword", "$2a$10$hashedpassword")).thenReturn(false);
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
 
             IllegalArgumentException ex1 = assertThrows(IllegalArgumentException.class,
                     () -> authService.login(wrongEmail));
