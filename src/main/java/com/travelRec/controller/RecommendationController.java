@@ -1,11 +1,12 @@
 package com.travelRec.controller;
 
 import com.travelRec.dto.recommendation.RecommendationResponse;
+import com.travelRec.dto.recommendation.TripRecommendationResponse;
 import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
 import com.travelRec.security.CustomUserDetails;
-import com.travelRec.service.RecommendationService;
+import com.travelRec.service.recommendation.RecommendationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -68,5 +69,12 @@ public class RecommendationController {
             @RequestParam(defaultValue = "10") int limit) {
         Long userId = user != null ? user.getId() : null;
         return ResponseEntity.ok(recommendationService.getNearbyByCoordinates(userId, lat, lng, radiusKm, limit));
+    }
+
+    @GetMapping("/trips")
+    public ResponseEntity<List<TripRecommendationResponse>> getRecommendedTrips(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @RequestParam(required = false) List<Continent> continent) {
+        return ResponseEntity.ok(recommendationService.getRecommendedTrips(user.getId(), continent));
     }
 }

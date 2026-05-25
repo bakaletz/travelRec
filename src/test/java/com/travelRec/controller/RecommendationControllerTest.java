@@ -5,7 +5,7 @@ import com.travelRec.dto.recommendation.RecommendationResponse;
 import com.travelRec.entity.enums.CityType;
 import com.travelRec.entity.enums.ClimateType;
 import com.travelRec.entity.enums.Continent;
-import com.travelRec.service.RecommendationService;
+import com.travelRec.service.recommendation.RecommendationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

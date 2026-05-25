@@ -57,6 +57,12 @@ public class Trip {
         if (this.status != TripStatus.PLANNED) {
             throw new IllegalStateException("Only PLANNED trips can be completed");
         }
+        if (this.startDate == null || this.endDate == null) {
+            throw new IllegalStateException("Trip must have both start and end dates before it can be completed");
+        }
+        if (this.startDate.isAfter(this.endDate)) {
+            throw new IllegalStateException("Trip start date cannot be after its end date");
+        }
         this.status = TripStatus.COMPLETED;
     }
 

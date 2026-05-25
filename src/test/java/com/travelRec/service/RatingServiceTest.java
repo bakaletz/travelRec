@@ -7,6 +7,7 @@ import com.travelRec.entity.*;
 import com.travelRec.entity.enums.*;
 import com.travelRec.mapper.RatingMapper;
 import com.travelRec.repository.RatingRepository;
+import com.travelRec.service.recommendation.RecommendationService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
