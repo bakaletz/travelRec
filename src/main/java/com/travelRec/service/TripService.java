@@ -75,6 +75,13 @@ public class TripService {
         Trip trip = findOwnedTrip(userId, id);
         trip.complete();
 
+        List<Trip> overlapping = tripRepository.findOverlappingTrips(
+                userId, id, trip.getStartDate(), trip.getEndDate());
+        if (!overlapping.isEmpty()) {
+            throw new IllegalStateException(
+                    "This trip's dates overlap with another completed trip: " + overlapping.get(0).getName());
+        }
+
         for (TripCity tc : trip.getTripCities()) {
             Long cityId = tc.getCity().getId();
             long otherCompleted = tripCityRepository.countOtherCompletedTripsWithCity(userId, cityId, id);

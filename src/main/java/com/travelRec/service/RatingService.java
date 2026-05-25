@@ -7,6 +7,7 @@ import com.travelRec.entity.*;
 import com.travelRec.entity.enums.TripStatus;
 import com.travelRec.mapper.RatingMapper;
 import com.travelRec.repository.RatingRepository;
+import com.travelRec.service.recommendation.RecommendationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -130,6 +131,8 @@ public class RatingService {
 
         if (rating.isDetailed()) {
             recommendationService.updatePreferences(rating.getUser(), rating);
+        } else {
+            recommendationService.updatePreferencesFromQuick(rating.getUser(), rating);
         }
 
         if (trip.getStatus() == TripStatus.COMPLETED) {

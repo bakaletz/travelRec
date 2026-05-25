@@ -1,4 +1,4 @@
-package com.travelRec.service;
+package com.travelRec.service.recommendation;
 
 import com.travelRec.dto.recommendation.RecommendationResponse;
 import com.travelRec.entity.*;

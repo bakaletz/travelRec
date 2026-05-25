@@ -28,4 +28,12 @@ public interface TripCityRepository extends JpaRepository<TripCity, Long> {
     long countOtherCompletedTripsWithCity(@Param("userId") Long userId,
                                           @Param("cityId") Long cityId,
                                           @Param("excludedTripId") Long excludedTripId);
+
+    @Query("""
+        SELECT DISTINCT tc.city.id FROM TripCity tc
+        WHERE tc.trip.user.id = :userId
+          AND tc.trip.status IN (com.travelRec.entity.enums.TripStatus.COMPLETED,
+                                 com.travelRec.entity.enums.TripStatus.RATED)
+    """)
+    List<Long> findVisitedCityIdsByUserId(@Param("userId") Long userId);
 }
