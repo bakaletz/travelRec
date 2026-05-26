@@ -62,16 +62,17 @@ public class RecommendationService {
     private static final double COHERENCE_CONTEXT_WEIGHT = 0.5;
     private static final double COHERENCE_PROXIMITY_WEIGHT = 0.5;
     private static final double PROXIMITY_SATURATION_KM = 2000.0;
+    private static final double WORST_LINK_WEIGHT = 0.3;
     private static final double MIN_TRIP_SCORE = 0.55;
     private static final double COLD_START_MIN_TRIP_SCORE = 0.35;
     private static final double COLD_START_POPULARITY_WEIGHT = 0.7;
     private static final double COLD_START_COHERENCE_FLOOR = 0.5;
     private static final double OVERLAP_PENALTY_PER_CITY = 0.12;
+    private static final double COLD_START_DURATION_REPEAT_PENALTY = 0.2;
     private static final int TRIP_RESULT_LIMIT = 4;
     private static final int COLD_START_DURATION_LOW = 3;
     private static final int COLD_START_DURATION_MID = 7;
     private static final int COLD_START_DURATION_HIGH = 14;
-    private static final int DAYS_PER_CITY = 4;
     private static final int MIN_DAYS_PER_CITY = 2;
     private static final int SEED_POOL_PER_LENGTH = 12;
     private static final int MIN_TRIP_CITIES = 2;
@@ -305,6 +306,8 @@ public class RecommendationService {
                 Set<Long> citySet = route.stream().map(City::getId).collect(Collectors.toSet());
                 if (!seenCitySets.add(citySet)) continue;
 
+                route = orderRouteByProximity(route);
+
                 double relevance = meanRouteRelevance(userVector, route, profile.dominantCityType(), coldStart, maxPop);
                 double coherence = coherence(route);
                 double tripScore = TRIP_RELEVANCE_WEIGHT * relevance + TRIP_COHERENCE_WEIGHT * coherence;
@@ -323,17 +326,18 @@ public class RecommendationService {
             pool = new ArrayList<>(built);
         }
 
-        List<RouteCandidate> selected = selectDiverse(pool);
+        List<RouteCandidate> selected = selectDiverse(pool, coldStart);
 
         return selected.stream()
                 .map(candidate -> toResponse(candidate, profile))
                 .collect(Collectors.toList());
     }
 
-    private List<RouteCandidate> selectDiverse(List<RouteCandidate> pool) {
+    private List<RouteCandidate> selectDiverse(List<RouteCandidate> pool, boolean coldStart) {
         List<RouteCandidate> remaining = new ArrayList<>(pool);
         List<RouteCandidate> selected = new ArrayList<>(TRIP_RESULT_LIMIT);
         Set<Long> usedCityIds = new HashSet<>();
+        Set<Integer> usedDurations = new HashSet<>();
 
         while (selected.size() < TRIP_RESULT_LIMIT && !remaining.isEmpty()) {
             RouteCandidate best = null;
@@ -345,6 +349,11 @@ public class RecommendationService {
                     if (usedCityIds.contains(id)) overlap++;
                 }
                 double adjusted = candidate.tripScore() - OVERLAP_PENALTY_PER_CITY * overlap;
+
+                if (coldStart && usedDurations.contains(candidate.variant().durationDays())) {
+                    adjusted -= COLD_START_DURATION_REPEAT_PENALTY;
+                }
+
                 if (adjusted > bestAdjusted) {
                     bestAdjusted = adjusted;
                     best = candidate;
@@ -354,6 +363,7 @@ public class RecommendationService {
             if (best == null) break;
             selected.add(best);
             usedCityIds.addAll(best.citySet());
+            usedDurations.add(best.variant().durationDays());
             remaining.remove(best);
         }
 
@@ -512,14 +522,10 @@ public class RecommendationService {
 
     private List<TripVariant> coldStartVariants() {
         return List.of(
-                new TripVariant(citiesForDuration(COLD_START_DURATION_LOW), COLD_START_DURATION_LOW),
-                new TripVariant(citiesForDuration(COLD_START_DURATION_MID), COLD_START_DURATION_MID),
-                new TripVariant(citiesForDuration(COLD_START_DURATION_HIGH), COLD_START_DURATION_HIGH)
+                new TripVariant(2, COLD_START_DURATION_LOW),
+                new TripVariant(3, COLD_START_DURATION_MID),
+                new TripVariant(4, COLD_START_DURATION_HIGH)
         );
-    }
-
-    private int citiesForDuration(int durationDays) {
-        return Math.min(4, Math.max(MIN_TRIP_CITIES, Math.round((float) durationDays / DAYS_PER_CITY)));
     }
 
     private List<City> assembleRoute(double[] userVector, List<City> candidates, City seed,
@@ -628,18 +634,51 @@ public class RecommendationService {
         return match;
     }
 
+    private List<City> orderRouteByProximity(List<City> route) {
+        if (route.size() < 3) return route;
+
+        List<City> remaining = new ArrayList<>(route);
+        List<City> ordered = new ArrayList<>(route.size());
+        ordered.add(remaining.remove(0));
+
+        while (!remaining.isEmpty()) {
+            City last = ordered.get(ordered.size() - 1);
+            City nearest = null;
+            double minDist = Double.MAX_VALUE;
+
+            for (City candidate : remaining) {
+                double dist = VectorMath.haversineDistance(
+                        last.getLatitude(), last.getLongitude(),
+                        candidate.getLatitude(), candidate.getLongitude());
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = candidate;
+                }
+            }
+
+            remaining.remove(nearest);
+            ordered.add(nearest);
+        }
+
+        return ordered;
+    }
+
     private double coherence(List<City> route) {
         if (route.size() < 2) return 1.0;
 
         double sum = 0.0;
-        int pairs = 0;
-        for (int i = 0; i < route.size(); i++) {
-            for (int j = i + 1; j < route.size(); j++) {
-                sum += pairCoherence(route.get(i), route.get(j));
-                pairs++;
-            }
+        double worst = Double.POSITIVE_INFINITY;
+        int transitions = 0;
+        for (int i = 1; i < route.size(); i++) {
+            double link = pairCoherence(route.get(i - 1), route.get(i));
+            sum += link;
+            if (link < worst) worst = link;
+            transitions++;
         }
-        return pairs == 0 ? 1.0 : sum / pairs;
+
+        if (transitions == 0) return 1.0;
+        double mean = sum / transitions;
+        return (1.0 - WORST_LINK_WEIGHT) * mean + WORST_LINK_WEIGHT * worst;
     }
 
     private double pairCoherence(City a, City b) {
