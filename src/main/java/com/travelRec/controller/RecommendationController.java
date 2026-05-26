@@ -77,4 +77,18 @@ public class RecommendationController {
             @RequestParam(required = false) List<Continent> continent) {
         return ResponseEntity.ok(recommendationService.getRecommendedTrips(user.getId(), continent));
     }
+
+    @GetMapping("/by-country/{countryId}")
+    public ResponseEntity<List<RecommendationResponse>> getCountryCityMatches(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @PathVariable Long countryId) {
+        return ResponseEntity.ok(recommendationService.getCountryCityMatches(user.getId(), countryId));
+    }
+
+    @GetMapping("/match/{cityId}")
+    public ResponseEntity<RecommendationResponse> getMatch(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @PathVariable Long cityId) {
+        return ResponseEntity.ok(recommendationService.getMatch(user.getId(), cityId));
+    }
 }

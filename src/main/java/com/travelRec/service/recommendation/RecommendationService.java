@@ -111,6 +111,55 @@ public class RecommendationService {
                 .collect(Collectors.toList());
     }
 
+    public List<RecommendationResponse> getCountryCityMatches(Long userId, Long countryId) {
+        UserPreferences prefs = preferencesRepository.findByUserId(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Preferences not found for user: " + userId));
+
+        double[] userVector = prefs.toVector();
+
+        return cityRepository.findByCountryId(countryId).stream()
+                .map(city -> {
+                    double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+
+                    if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
+                        score *= PENALTY_MULTIPLIER;
+                    }
+                    if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
+                        score *= PENALTY_MULTIPLIER;
+                    }
+
+                    return RecommendationResponse.builder()
+                            .city(cityMapper.toResponse(city))
+                            .similarityScore(VectorMath.round3(score))
+                            .build();
+                })
+                .sorted(Comparator.comparingDouble(RecommendationResponse::getSimilarityScore).reversed())
+                .collect(Collectors.toList());
+    }
+
+    public RecommendationResponse getMatch(Long userId, Long cityId) {
+        UserPreferences prefs = preferencesRepository.findByUserId(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Preferences not found for user: " + userId));
+
+        City city = cityRepository.findById(cityId)
+                .orElseThrow(() -> new EntityNotFoundException("City not found with id: " + cityId));
+
+        double[] userVector = prefs.toVector();
+        double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+
+        if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
+            score *= PENALTY_MULTIPLIER;
+        }
+        if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
+            score *= PENALTY_MULTIPLIER;
+        }
+
+        return RecommendationResponse.builder()
+                .city(cityMapper.toResponse(city))
+                .similarityScore(VectorMath.round3(score))
+                .build();
+    }
+
     public List<RecommendationResponse> getPopular(int limit) {
         return cityRepository.findTopByPopularity(limit).stream()
                 .map(city -> RecommendationResponse.builder()
