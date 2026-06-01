@@ -20,6 +20,8 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
 
     List<Rating> findByUserId(Long userId);
 
+    List<Rating> findByUserIdAndCityId(Long userId, Long cityId);
+
     Optional<Rating> findByUserIdAndTripIdAndCityId(Long userId, Long tripId, Long cityId);
 
     boolean existsByUserIdAndTripIdAndCityId(Long userId, Long tripId, Long cityId);
