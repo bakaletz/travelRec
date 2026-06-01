@@ -3,6 +3,7 @@ package com.travelRec.service;
 import com.travelRec.dto.rating.DetailedRatingRequest;
 import com.travelRec.dto.rating.QuickRatingRequest;
 import com.travelRec.dto.rating.RatingResponse;
+import com.travelRec.dto.rating.UserCityRatingResponse;
 import com.travelRec.entity.*;
 import com.travelRec.entity.enums.TripStatus;
 import com.travelRec.mapper.RatingMapper;
@@ -15,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.OptionalDouble;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -110,6 +114,35 @@ public class RatingService {
         }
 
         return ratingMapper.toResponse(rating);
+    }
+
+    public UserCityRatingResponse getUserCityRating(Long userId, Long cityId) {
+        List<Rating> ratings = ratingRepository.findByUserIdAndCityId(userId, cityId);
+        if (ratings.isEmpty()) {
+            return UserCityRatingResponse.builder().ratingCount(0).build();
+        }
+        return UserCityRatingResponse.builder()
+                .ratingCount(ratings.size())
+                .overallScore(avg(ratings, Rating::getOverallScore))
+                .cultureRating(avg(ratings, Rating::getCultureRating))
+                .foodRating(avg(ratings, Rating::getFoodRating))
+                .nightlifeRating(avg(ratings, Rating::getNightlifeRating))
+                .natureRating(avg(ratings, Rating::getNatureRating))
+                .safetyRating(avg(ratings, Rating::getSafetyRating))
+                .costRating(avg(ratings, Rating::getCostRating))
+                .beachRating(avg(ratings, Rating::getBeachRating))
+                .architectureRating(avg(ratings, Rating::getArchitectureRating))
+                .shoppingRating(avg(ratings, Rating::getShoppingRating))
+                .build();
+    }
+
+    private Double avg(List<Rating> ratings, Function<Rating, Integer> getter) {
+        OptionalDouble result = ratings.stream()
+                .map(getter)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .average();
+        return result.isPresent() ? result.getAsDouble() : null;
     }
 
     private void validateCanCreate(Long userId, Trip trip, Long tripId, Long cityId) {

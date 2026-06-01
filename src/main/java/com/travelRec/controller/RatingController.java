@@ -3,6 +3,7 @@ package com.travelRec.controller;
 import com.travelRec.dto.rating.DetailedRatingRequest;
 import com.travelRec.dto.rating.QuickRatingRequest;
 import com.travelRec.dto.rating.RatingResponse;
+import com.travelRec.dto.rating.UserCityRatingResponse;
 import com.travelRec.security.CustomUserDetails;
 import com.travelRec.service.RatingService;
 import jakarta.validation.Valid;
@@ -37,6 +38,13 @@ public class RatingController {
     @GetMapping("/city/{cityId}")
     public ResponseEntity<List<RatingResponse>> getRatingsByCity(@PathVariable Long cityId) {
         return ResponseEntity.ok(ratingService.getRatingsByCity(cityId));
+    }
+
+    @GetMapping("/city/{cityId}/me")
+    public ResponseEntity<UserCityRatingResponse> getCurrentUserCityRating(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @PathVariable Long cityId) {
+        return ResponseEntity.ok(ratingService.getUserCityRating(user.getId(), cityId));
     }
 
     @PostMapping("/quick")
