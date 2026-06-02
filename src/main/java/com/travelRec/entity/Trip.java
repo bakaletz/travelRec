@@ -63,9 +63,11 @@ public class Trip {
         if (this.startDate.isAfter(this.endDate)) {
             throw new IllegalStateException("Trip start date cannot be after its end date");
         }
+        if (this.endDate.isAfter(LocalDate.now())) {
+            throw new IllegalStateException("Trip cannot be completed before its end date");
+        }
         this.status = TripStatus.COMPLETED;
     }
-
     public void cancel() {
         if (this.status != TripStatus.PLANNED) {
             throw new IllegalStateException("Only PLANNED trips can be cancelled");
