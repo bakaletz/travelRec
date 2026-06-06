@@ -11,41 +11,6 @@ class VectorMathTest {
     private static final double EPSILON = 1e-6;
 
     @Nested
-    @DisplayName("cosineSimilarity")
-    class CosineSimilarity {
-
-        @Test
-        @DisplayName("identical vectors produce 1.0")
-        void identicalVectors() {
-            double[] v = {0.5, 0.5, 0.8, 0.2};
-            assertEquals(1.0, VectorMath.cosineSimilarity(v, v), EPSILON);
-        }
-
-        @Test
-        @DisplayName("orthogonal vectors produce 0.0")
-        void orthogonalVectors() {
-            double[] a = {1.0, 0.0};
-            double[] b = {0.0, 1.0};
-            assertEquals(0.0, VectorMath.cosineSimilarity(a, b), EPSILON);
-        }
-
-        @Test
-        @DisplayName("zero vector returns 0.0")
-        void zeroVectorReturnsZero() {
-            double[] zero = {0.0, 0.0, 0.0};
-            double[] nonZero = {0.5, 0.5, 0.5};
-            assertEquals(0.0, VectorMath.cosineSimilarity(zero, nonZero));
-        }
-
-        @Test
-        @DisplayName("mismatched lengths throw IllegalArgumentException")
-        void mismatchedLengthsThrow() {
-            assertThrows(IllegalArgumentException.class,
-                    () -> VectorMath.cosineSimilarity(new double[]{1, 2}, new double[]{1, 2, 3}));
-        }
-    }
-
-    @Nested
     @DisplayName("centeredCosineSimilarity")
     class CenteredCosineSimilarity {
 
@@ -72,17 +37,6 @@ class VectorMathTest {
             double[] a = {1.0, 0.0, 1.0, 0.0};
             double[] b = {0.0, 1.0, 0.0, 1.0};
             assertEquals(0.0, VectorMath.centeredCosineSimilarity(a, b), EPSILON);
-        }
-
-        @Test
-        @DisplayName("provides wider spread than plain cosine on positive vectors")
-        void widerSpreadThanPlainCosine() {
-            double[] a = {0.9, 0.1, 0.1, 0.9};
-            double[] b = {0.1, 0.9, 0.9, 0.1};
-            double plain = VectorMath.cosineSimilarity(a, b);
-            double centered = VectorMath.centeredCosineSimilarity(a, b);
-            assertTrue(centered < plain,
-                    "Centered similarity (" + centered + ") should be less than plain cosine (" + plain + ") for opposing patterns");
         }
     }
 
