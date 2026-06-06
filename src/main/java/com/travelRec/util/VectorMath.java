@@ -4,28 +4,6 @@ public final class VectorMath {
 
     private VectorMath() {}
 
-    public static double cosineSimilarity(double[] a, double[] b) {
-        if (a.length != b.length) {
-            throw new IllegalArgumentException("Vectors must have same length");
-        }
-
-        double dotProduct = 0.0;
-        double normA = 0.0;
-        double normB = 0.0;
-
-        for (int i = 0; i < a.length; i++) {
-            dotProduct += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        if (normA == 0.0 || normB == 0.0) {
-            return 0.0;
-        }
-
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-    }
-
     public static double centeredCosineSimilarity(double[] a, double[] b) {
         if (a.length != b.length) {
             throw new IllegalArgumentException("Vectors must have same length");
@@ -79,5 +57,19 @@ public final class VectorMath {
         double alpha = Math.max(baseAlpha, 1.0 / (priorRatingCount + 1));
         double newWeight = (1.0 - alpha) * currentWeight + alpha * newRating;
         return (float) Math.max(0.0, Math.min(1.0, newWeight));
+    }
+
+    public static double weightedUtility(double[] weights, double[] features) {
+        if (weights.length != features.length) {
+            throw new IllegalArgumentException("Vectors must have same length");
+        }
+        double weighted = 0.0;
+        double weightSum = 0.0;
+        for (int i = 0; i < weights.length; i++) {
+            weighted += weights[i] * features[i];
+            weightSum += weights[i];
+        }
+        if (weightSum == 0.0) return 0.0;
+        return weighted / weightSum;
     }
 }

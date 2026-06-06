@@ -14,8 +14,6 @@ import com.travelRec.repository.CityRepository;
 import com.travelRec.repository.RatingRepository;
 import com.travelRec.repository.TripCityRepository;
 import com.travelRec.repository.UserPreferencesRepository;
-import com.travelRec.service.recommendation.TripProfile;
-import com.travelRec.service.recommendation.TripProfileService;
 import com.travelRec.util.ContextDistance;
 import com.travelRec.util.VectorMath;
 import jakarta.persistence.EntityNotFoundException;
@@ -48,7 +46,6 @@ public class RecommendationService {
     private static final double BASE_LEARNING_RATE = 0.1;
     private static final double QUICK_LEARNING_RATE = 0.04;
     private static final int QUICK_POSITIVE_THRESHOLD = 4;
-    private static final double PENALTY_MULTIPLIER = 0.85;
     private static final double MAX_CITY_TYPE_PENALTY = 0.20;
     private static final double MAX_CLIMATE_PENALTY = 0.25;
     private static final double MAX_CONTINENT_PENALTY = 0.30;
@@ -61,7 +58,6 @@ public class RecommendationService {
     private static final double TRIP_COHERENCE_WEIGHT = 0.35;
     private static final double COHERENCE_CONTEXT_WEIGHT = 0.5;
     private static final double COHERENCE_PROXIMITY_WEIGHT = 0.5;
-    private static final double PROXIMITY_SATURATION_KM = 2000.0;
     private static final double WORST_LINK_WEIGHT = 0.3;
     private static final double MIN_TRIP_SCORE = 0.55;
     private static final double COLD_START_MIN_TRIP_SCORE = 0.35;
@@ -69,7 +65,7 @@ public class RecommendationService {
     private static final double COLD_START_COHERENCE_FLOOR = 0.5;
     private static final double OVERLAP_PENALTY_PER_CITY = 0.12;
     private static final double COLD_START_DURATION_REPEAT_PENALTY = 0.2;
-    private static final int TRIP_RESULT_LIMIT = 4;
+    private static final int TRIP_RESULT_LIMIT = 8;
     private static final int COLD_START_DURATION_LOW = 3;
     private static final int COLD_START_DURATION_MID = 7;
     private static final int COLD_START_DURATION_HIGH = 14;
@@ -93,14 +89,9 @@ public class RecommendationService {
 
         return cities.stream()
                 .map(city -> {
-                    double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+                    double score = VectorMath.weightedUtility(userVector, city.toVector());
 
-                    if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
-                        score *= PENALTY_MULTIPLIER;
-                    }
-                    if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
-                        score *= PENALTY_MULTIPLIER;
-                    }
+                    score = applyPreferencePenalties(score, prefs, city);
 
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
@@ -120,14 +111,9 @@ public class RecommendationService {
 
         return cityRepository.findByCountryId(countryId).stream()
                 .map(city -> {
-                    double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+                    double score = VectorMath.weightedUtility(userVector, city.toVector());
 
-                    if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
-                        score *= PENALTY_MULTIPLIER;
-                    }
-                    if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
-                        score *= PENALTY_MULTIPLIER;
-                    }
+                    score = applyPreferencePenalties(score, prefs, city);
 
                     return RecommendationResponse.builder()
                             .city(cityMapper.toResponse(city))
@@ -146,14 +132,9 @@ public class RecommendationService {
                 .orElseThrow(() -> new EntityNotFoundException("City not found with id: " + cityId));
 
         double[] userVector = prefs.toVector();
-        double score = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+        double score = VectorMath.weightedUtility(userVector, city.toVector());
 
-        if (prefs.hasPreferredCityTypes() && !prefs.matchesCityType(city.getCityType())) {
-            score *= PENALTY_MULTIPLIER;
-        }
-        if (prefs.hasPreferredClimateTypes() && !prefs.matchesClimateType(city.getClimateType())) {
-            score *= PENALTY_MULTIPLIER;
-        }
+        score = applyPreferencePenalties(score, prefs, city);
 
         return RecommendationResponse.builder()
                 .city(cityMapper.toResponse(city))
@@ -208,7 +189,7 @@ public class RecommendationService {
 
         return nearby.stream()
                 .map(city -> {
-                    double similarity = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+                    double similarity = VectorMath.weightedUtility(userVector, city.toVector());
                     double distance = VectorMath.haversineDistance(origin.getLatitude(), origin.getLongitude(),
                             city.getLatitude(), city.getLongitude());
                     double proximityScore = Math.max(0.0, 1.0 - (distance / radiusKm));
@@ -239,7 +220,7 @@ public class RecommendationService {
 
                     double finalScore;
                     if (userVector != null) {
-                        double similarity = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
+                        double similarity = VectorMath.weightedUtility(userVector, city.toVector());
                         finalScore = similarity * NEARBY_SIMILARITY_WEIGHT + proximityScore * NEARBY_PROXIMITY_WEIGHT;
                     } else {
                         finalScore = proximityScore;
@@ -290,7 +271,7 @@ public class RecommendationService {
         final double maxPop = maxPopularity;
         List<City> seeds = allCities.stream()
                 .sorted(Comparator.comparingDouble(
-                        (City c) -> cityRelevance(userVector, c, profile.dominantCityType(), coldStart, maxPop)).reversed())
+                        (City c) -> cityRelevance(userVector, c, profile, coldStart, maxPop)).reversed())
                 .limit(SEED_POOL_PER_LENGTH)
                 .collect(Collectors.toList());
 
@@ -300,7 +281,7 @@ public class RecommendationService {
         for (TripVariant variant : variants) {
             for (City seed : seeds) {
                 List<City> route = assembleRoute(userVector, allCities, seed, variant.cityCount(),
-                        profile.dominantCityType());
+                        profile);
                 if (route.size() < MIN_TRIP_CITIES) continue;
 
                 Set<Long> citySet = route.stream().map(City::getId).collect(Collectors.toSet());
@@ -308,8 +289,8 @@ public class RecommendationService {
 
                 route = orderRouteByProximity(route);
 
-                double relevance = meanRouteRelevance(userVector, route, profile.dominantCityType(), coldStart, maxPop);
-                double coherence = coherence(route);
+                double relevance = meanRouteRelevance(userVector, route, profile, coldStart, maxPop);
+                double coherence = coherence(route, profile);
                 double tripScore = TRIP_RELEVANCE_WEIGHT * relevance + TRIP_COHERENCE_WEIGHT * coherence;
 
                 built.add(new RouteCandidate(route, citySet, tripScore, relevance, coherence, variant));
@@ -529,18 +510,18 @@ public class RecommendationService {
     }
 
     private List<City> assembleRoute(double[] userVector, List<City> candidates, City seed,
-                                     int cityCount, CityType dominantType) {
+                                     int cityCount, TripProfile profile) {
         if (candidates.isEmpty() || seed == null || cityCount < MIN_TRIP_CITIES) return List.of();
 
         if (cityCount == 2) {
-            return bestPairFrom(userVector, candidates, seed, dominantType);
+            return bestPairFrom(userVector, candidates, seed, profile);
         }
 
-        return greedyRoute(userVector, candidates, seed, cityCount, dominantType);
+        return greedyRoute(userVector, candidates, seed, cityCount, profile);
     }
 
-    private List<City> bestPairFrom(double[] userVector, List<City> candidates, City seed, CityType dominantType) {
-        double matchSeed = biasedMatch(userVector, seed, dominantType);
+    private List<City> bestPairFrom(double[] userVector, List<City> candidates, City seed, TripProfile profile) {
+        double matchSeed = biasedMatch(userVector, seed, profile);
 
         City bestPartner = null;
         double bestScore = Double.NEGATIVE_INFINITY;
@@ -548,9 +529,9 @@ public class RecommendationService {
         for (City candidate : candidates) {
             if (candidate.getId().equals(seed.getId())) continue;
 
-            double matchCandidate = biasedMatch(userVector, candidate, dominantType);
+            double matchCandidate = biasedMatch(userVector, candidate, profile);
             double relevance = (matchSeed + matchCandidate) / 2.0;
-            double coherence = pairCoherence(seed, candidate);
+            double coherence = pairCoherence(seed, candidate, profile);
             double score = TRIP_RELEVANCE_WEIGHT * relevance + TRIP_COHERENCE_WEIGHT * coherence;
             if (score > bestScore) {
                 bestScore = score;
@@ -566,7 +547,7 @@ public class RecommendationService {
     }
 
     private List<City> greedyRoute(double[] userVector, List<City> candidates, City seed,
-                                   int cityCount, CityType dominantType) {
+                                   int cityCount, TripProfile profile) {
         List<City> route = new ArrayList<>(cityCount);
         route.add(seed);
         Set<Long> used = new LinkedHashSet<>();
@@ -579,10 +560,10 @@ public class RecommendationService {
             for (City candidate : candidates) {
                 if (used.contains(candidate.getId())) continue;
 
-                double match = biasedMatch(userVector, candidate, dominantType);
+                double match = biasedMatch(userVector, candidate, profile);
                 double coherenceWithRoute = 0.0;
                 for (City inRoute : route) {
-                    coherenceWithRoute += pairCoherence(candidate, inRoute);
+                    coherenceWithRoute += pairCoherence(candidate, inRoute, profile);
                 }
                 coherenceWithRoute /= route.size();
 
@@ -601,20 +582,20 @@ public class RecommendationService {
         return route;
     }
 
-    private double meanRouteRelevance(double[] userVector, List<City> route, CityType dominantType,
+    private double meanRouteRelevance(double[] userVector, List<City> route, TripProfile profile,
                                       boolean coldStart, double maxPopularity) {
         if (route.isEmpty()) return 0.0;
         double sum = 0.0;
         for (City city : route) {
-            sum += cityRelevance(userVector, city, dominantType, coldStart, maxPopularity);
+            sum += cityRelevance(userVector, city, profile, coldStart, maxPopularity);
         }
         return sum / route.size();
     }
 
-    private double cityRelevance(double[] userVector, City city, CityType dominantType,
+    private double cityRelevance(double[] userVector, City city, TripProfile profile,
                                  boolean coldStart, double maxPopularity) {
         if (!coldStart) {
-            return biasedMatch(userVector, city, dominantType);
+            return biasedMatch(userVector, city, profile);
         }
 
         double popularity = maxPopularity > 0.0 && city.getPopularity() != null
@@ -625,11 +606,15 @@ public class RecommendationService {
                 + (1.0 - COLD_START_POPULARITY_WEIGHT) * COLD_START_COHERENCE_FLOOR;
     }
 
-    private double biasedMatch(double[] userVector, City city, CityType dominantType) {
-        double match = VectorMath.centeredCosineSimilarity(userVector, city.toVector());
-        if (dominantType != null) {
-            double typeDist = ContextDistance.cityTypeDistance(dominantType, city.getCityType());
+    private double biasedMatch(double[] userVector, City city, TripProfile profile) {
+        double match = VectorMath.weightedUtility(userVector, city.toVector());
+        if (profile.dominantCityType() != null) {
+            double typeDist = ContextDistance.cityTypeDistance(profile.dominantCityType(), city.getCityType());
             match *= (1.0 - MAX_CITY_TYPE_PENALTY * typeDist);
+        }
+        if (profile.dominantClimateType() != null) {
+            double climateDist = ContextDistance.climateDistance(profile.dominantClimateType(), city.getClimateType());
+            match *= (1.0 - MAX_CLIMATE_PENALTY * climateDist);
         }
         return match;
     }
@@ -663,14 +648,14 @@ public class RecommendationService {
         return ordered;
     }
 
-    private double coherence(List<City> route) {
+    private double coherence(List<City> route, TripProfile profile) {
         if (route.size() < 2) return 1.0;
 
         double sum = 0.0;
         double worst = Double.POSITIVE_INFINITY;
         int transitions = 0;
         for (int i = 1; i < route.size(); i++) {
-            double link = pairCoherence(route.get(i - 1), route.get(i));
+            double link = pairCoherence(route.get(i - 1), route.get(i), profile);
             sum += link;
             if (link < worst) worst = link;
             transitions++;
@@ -681,7 +666,7 @@ public class RecommendationService {
         return (1.0 - WORST_LINK_WEIGHT) * mean + WORST_LINK_WEIGHT * worst;
     }
 
-    private double pairCoherence(City a, City b) {
+    private double pairCoherence(City a, City b, TripProfile profile) {
         double cityTypeDist = ContextDistance.cityTypeDistance(a.getCityType(), b.getCityType());
         double climateDist = ContextDistance.climateDistance(a.getClimateType(), b.getClimateType());
 
@@ -696,7 +681,7 @@ public class RecommendationService {
 
         double distance = VectorMath.haversineDistance(a.getLatitude(), a.getLongitude(),
                 b.getLatitude(), b.getLongitude());
-        double proximity = Math.max(0.0, 1.0 - (distance / PROXIMITY_SATURATION_KM));
+        double proximity = Math.max(0.0, 1.0 - (distance / profile.proximitySaturationKm()));
 
         return COHERENCE_CONTEXT_WEIGHT * contextCoherence + COHERENCE_PROXIMITY_WEIGHT * proximity;
     }
@@ -765,8 +750,9 @@ public class RecommendationService {
     private List<City> applyFilters(List<City> cities, List<Continent> continents,
                                     List<CityType> cityTypes, List<ClimateType> climateTypes) {
         if (continents != null && !continents.isEmpty()) {
+            Set<Continent> expanded = expandContinents(continents);
             cities = cities.stream()
-                    .filter(c -> continents.contains(c.getCountry().getContinent()))
+                    .filter(c -> c.getCountry() != null && expanded.contains(c.getCountry().getContinent()))
                     .collect(Collectors.toList());
         }
 
@@ -782,6 +768,34 @@ public class RecommendationService {
                     .collect(Collectors.toList());
         }
         return cities;
+    }
+
+    private double nearestCityTypeDistance(Set<CityType> preferred, CityType type) {
+        double min = Double.MAX_VALUE;
+        for (CityType p : preferred) {
+            min = Math.min(min, ContextDistance.cityTypeDistance(p, type));
+        }
+        return min == Double.MAX_VALUE ? 0.0 : min;
+    }
+
+    private double nearestClimateDistance(Set<ClimateType> preferred, ClimateType type) {
+        double min = Double.MAX_VALUE;
+        for (ClimateType p : preferred) {
+            min = Math.min(min, ContextDistance.climateDistance(p, type));
+        }
+        return min == Double.MAX_VALUE ? 0.0 : min;
+    }
+
+    private double applyPreferencePenalties(double score, UserPreferences prefs, City city) {
+        if (prefs.hasPreferredCityTypes()) {
+            double dist = nearestCityTypeDistance(prefs.getPreferredCityTypes(), city.getCityType());
+            score *= (1.0 - MAX_CITY_TYPE_PENALTY * dist);
+        }
+        if (prefs.hasPreferredClimateTypes()) {
+            double dist = nearestClimateDistance(prefs.getPreferredClimateTypes(), city.getClimateType());
+            score *= (1.0 - MAX_CLIMATE_PENALTY * dist);
+        }
+        return score;
     }
 
     private Set<Continent> expandContinents(List<Continent> continents) {
