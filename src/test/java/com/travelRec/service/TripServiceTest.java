@@ -71,8 +71,8 @@ class TripServiceTest {
         trip = Trip.builder()
                 .id(1L).user(user).name("Summer Europe")
                 .status(TripStatus.PLANNED)
-                .startDate(LocalDate.of(2026, 7, 10))
-                .endDate(LocalDate.of(2026, 7, 24))
+                .startDate(LocalDate.now().minusDays(10))
+                .endDate(LocalDate.now().minusDays(3))
                 .tripCities(new ArrayList<>())
                 .ratings(new ArrayList<>())
                 .build();

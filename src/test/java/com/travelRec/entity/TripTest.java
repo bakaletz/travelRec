@@ -6,6 +6,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -29,6 +31,8 @@ class TripTest {
         @Test
         @DisplayName("should change status from PLANNED to COMPLETED")
         void shouldComplete() {
+            trip.setStartDate(LocalDate.now().minusDays(5));
+            trip.setEndDate(LocalDate.now().minusDays(1));
             trip.complete();
             assertEquals(TripStatus.COMPLETED, trip.getStatus());
         }
