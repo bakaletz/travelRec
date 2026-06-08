@@ -6,7 +6,9 @@ import com.travelRec.entity.enums.*;
 import com.travelRec.mapper.CityMapper;
 import com.travelRec.repository.CityRepository;
 import com.travelRec.repository.RatingRepository;
+import com.travelRec.repository.TripCityRepository;
 import com.travelRec.repository.UserPreferencesRepository;
+import com.travelRec.dto.recommendation.TripRecommendationResponse;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +41,12 @@ class RecommendationServiceTest {
 
     @Mock
     private RatingRepository ratingRepository;
+
+    @Mock
+    private TripCityRepository tripCityRepository;
+
+    @Mock
+    private TripProfileService tripProfileService;
 
     @Spy
     private CityMapper cityMapper = new CityMapper();
@@ -83,6 +91,11 @@ class RecommendationServiceTest {
                 .architectureRatingCount(0)
                 .shoppingRatingCount(0)
                 .build();
+
+        // getPersonalized() and getRecommendedTrips() query already-visited cities;
+        // lenient so it does not trip strict stubbing in tests that never reach it.
+        lenient().when(tripCityRepository.findVisitedCityIdsByUserId(anyLong()))
+                .thenReturn(List.of());
     }
 
     private City buildCity(String name, float culture, float food, float nightlife,
@@ -915,4 +928,336 @@ class RecommendationServiceTest {
             verify(preferencesRepository, never()).save(any());
         }
     }
+
+    // ==================================================================
+    //  Added coverage: getRecommendedTrips / getCountryCityMatches /
+    //  getMatch / preference penalties / preference updates
+    // ==================================================================
+
+    @Nested
+    @DisplayName("getRecommendedTrips()")
+    class GetRecommendedTrips {
+
+        private City tripCity(String name, long id, double lat, double lng, float pop,
+                              CityType type, ClimateType climate, Country c) {
+            City city = buildCity(name, 0.8f, 0.7f, 0.4f, 0.6f, 0.5f, 0.5f, 0.3f, 0.7f, 0.4f);
+            city.setId(id);
+            city.setLatitude(lat);
+            city.setLongitude(lng);
+            city.setPopularity(pop);
+            city.setCityType(type);
+            city.setClimateType(climate);
+            city.setCountry(c);
+            return city;
+        }
+
+        @Test
+        @DisplayName("cold start: builds 2/3/4-city trips ranked by popularity")
+        void coldStart() {
+            TripProfile profile = new TripProfile(2, 7, 6, null, null, 2000.0,
+                    TripProfile.DataBucket.COLD_START);
+            City a = tripCity("Budapest", 10L, 47.5, 19.0, 0.8f, CityType.LARGE_CITY, ClimateType.CONTINENTAL, country);
+            City b = tripCity("Vienna", 11L, 48.2, 16.3, 0.6f, CityType.LARGE_CITY, ClimateType.CONTINENTAL, country);
+            City d = tripCity("Prague", 12L, 50.0, 14.4, 0.5f, CityType.LARGE_CITY, ClimateType.CONTINENTAL, country);
+            City e = tripCity("Rome", 13L, 41.9, 12.5, 0.7f, CityType.LARGE_CITY, ClimateType.MEDITERRANEAN, country);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(tripProfileService.buildProfile(1L)).thenReturn(profile);
+            when(cityRepository.findAllWithCountry()).thenReturn(List.of(a, b, d, e));
+
+            List<TripRecommendationResponse> trips = recommendationService.getRecommendedTrips(1L, null);
+
+            assertFalse(trips.isEmpty());
+            for (TripRecommendationResponse t : trips) {
+                assertTrue(t.getCities().size() >= 2);
+                assertNotNull(t.getReason());
+                assertTrue(t.getReason().contains("get you started"));
+                assertNotNull(t.getTripScore());
+                assertNotNull(t.getTotalDistanceKm());
+            }
+        }
+
+        @Test
+        @DisplayName("history (RICH): uses dominant type/climate and greedy assembly")
+        void richHistory() {
+            TripProfile profile = new TripProfile(4, 6, 1, CityType.LARGE_CITY,
+                    ClimateType.TEMPERATE, 1500.0, TripProfile.DataBucket.RICH);
+            Country asia = Country.builder().id(2L).name("Japan").code("JP").continent(Continent.ASIA).build();
+            City a = tripCity("Budapest", 10L, 47.5, 19.0, 0.8f, CityType.LARGE_CITY, ClimateType.TEMPERATE, country);
+            City b = tripCity("Tokyo", 11L, 35.6, 139.6, 0.9f, CityType.MEGAPOLIS, ClimateType.OCEANIC, asia);
+            City d = tripCity("Sorrento", 12L, 41.9, 12.5, 0.6f, CityType.RESORT, ClimateType.MEDITERRANEAN, country);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(tripProfileService.buildProfile(1L)).thenReturn(profile);
+            when(cityRepository.findAllWithCountry()).thenReturn(List.of(a, b, d));
+
+            List<TripRecommendationResponse> trips = recommendationService.getRecommendedTrips(1L, null);
+
+            assertFalse(trips.isEmpty());
+            assertEquals(CityType.LARGE_CITY, trips.get(0).getDominantCityType());
+            assertTrue(trips.get(0).getReason().contains("usual"));
+        }
+
+        @Test
+        @DisplayName("returns empty when fewer than two candidate cities remain")
+        void emptyWhenTooFew() {
+            TripProfile profile = new TripProfile(2, 7, 6, null, null, 2000.0,
+                    TripProfile.DataBucket.COLD_START);
+            City only = tripCity("Solo", 10L, 47.5, 19.0, 0.8f, CityType.LARGE_CITY, ClimateType.CONTINENTAL, country);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(tripProfileService.buildProfile(1L)).thenReturn(profile);
+            when(cityRepository.findAllWithCountry()).thenReturn(List.of(only));
+
+            assertTrue(recommendationService.getRecommendedTrips(1L, null).isEmpty());
+        }
+
+        @Test
+        @DisplayName("expands and filters by continent (Africa + North America)")
+        void continentFilter() {
+            TripProfile profile = new TripProfile(2, 7, 6, null, null, 2000.0,
+                    TripProfile.DataBucket.COLD_START);
+            Country africa = Country.builder().id(3L).name("Kenya").code("KE").continent(Continent.AFRICA).build();
+            City af1 = tripCity("Nairobi", 20L, -1.3, 36.8, 0.6f, CityType.LARGE_CITY, ClimateType.DRY, africa);
+            City af2 = tripCity("Mombasa", 21L, -4.0, 39.6, 0.5f, CityType.RESORT, ClimateType.TROPICAL, africa);
+            City eu = tripCity("Budapest", 22L, 47.5, 19.0, 0.9f, CityType.LARGE_CITY, ClimateType.CONTINENTAL, country);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(tripProfileService.buildProfile(1L)).thenReturn(profile);
+            when(cityRepository.findAllWithCountry()).thenReturn(List.of(af1, af2, eu));
+
+            List<TripRecommendationResponse> trips = recommendationService.getRecommendedTrips(
+                    1L, List.of(Continent.AFRICA, Continent.NORTH_AMERICA));
+
+            assertFalse(trips.isEmpty());
+            for (TripRecommendationResponse t : trips) {
+                for (var cr : t.getCities()) {
+                    assertNotEquals("Budapest", cr.getName());
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("throws when preferences not found")
+        void throwsWhenNoPrefs() {
+            when(preferencesRepository.findByUserId(99L)).thenReturn(Optional.empty());
+            assertThrows(EntityNotFoundException.class,
+                    () -> recommendationService.getRecommendedTrips(99L, null));
+        }
+    }
+
+    @Nested
+    @DisplayName("getCountryCityMatches()")
+    class GetCountryCityMatches {
+
+        @Test
+        @DisplayName("returns matches sorted by score descending")
+        void returnsSorted() {
+            City a = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            City b = buildCity("B", 0.2f, 0.2f, 0.9f, 0.1f, 0.9f, 0.9f, 0.1f, 0.1f, 0.9f);
+            b.setId(2L);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findByCountryId(5L)).thenReturn(List.of(a, b));
+
+            List<RecommendationResponse> r = recommendationService.getCountryCityMatches(1L, 5L);
+
+            assertEquals(2, r.size());
+            assertTrue(r.get(0).getSimilarityScore() >= r.get(1).getSimilarityScore());
+        }
+
+        @Test
+        @DisplayName("throws when preferences not found")
+        void throwsWhenNoPrefs() {
+            when(preferencesRepository.findByUserId(99L)).thenReturn(Optional.empty());
+            assertThrows(EntityNotFoundException.class,
+                    () -> recommendationService.getCountryCityMatches(99L, 5L));
+        }
+    }
+
+    @Nested
+    @DisplayName("getMatch()")
+    class GetMatch {
+
+        @Test
+        @DisplayName("returns a match score for the city")
+        void returnsMatch() {
+            City a = buildCity("Budapest", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findById(7L)).thenReturn(Optional.of(a));
+
+            RecommendationResponse r = recommendationService.getMatch(1L, 7L);
+
+            assertNotNull(r.getSimilarityScore());
+            assertEquals("Budapest", r.getCity().getName());
+        }
+
+        @Test
+        @DisplayName("throws when preferences not found")
+        void throwsWhenNoPrefs() {
+            when(preferencesRepository.findByUserId(99L)).thenReturn(Optional.empty());
+            assertThrows(EntityNotFoundException.class, () -> recommendationService.getMatch(99L, 7L));
+        }
+
+        @Test
+        @DisplayName("throws when city not found")
+        void throwsWhenCityNotFound() {
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            when(cityRepository.findById(404L)).thenReturn(Optional.empty());
+            assertThrows(EntityNotFoundException.class, () -> recommendationService.getMatch(1L, 404L));
+        }
+    }
+
+    @Nested
+    @DisplayName("preference penalties (via getPersonalized)")
+    class PreferencePenalties {
+
+        @Test
+        @DisplayName("applies penalties for preferred city/climate types")
+        void appliesPreferredTypePenalties() {
+            UserPreferences typed = UserPreferences.builder()
+                    .id(2L).user(user)
+                    .cultureWeight(0.9f).foodWeight(0.8f).nightlifeWeight(0.3f).natureWeight(0.7f)
+                    .safetyWeight(0.2f).budgetWeight(0.6f).beachWeight(0.4f)
+                    .architectureWeight(0.5f).shoppingWeight(0.1f)
+                    .preferredCityTypes(Set.of(CityType.RESORT))
+                    .preferredClimateTypes(Set.of(ClimateType.MEDITERRANEAN))
+                    .build();
+            City c = buildCity("Budapest", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(typed));
+            when(cityRepository.findAllWithCountry()).thenReturn(List.of(c));
+
+            List<RecommendationResponse> r = recommendationService.getPersonalized(1L, 10, null, null, null);
+
+            assertEquals(1, r.size());
+            assertNotNull(r.get(0).getSimilarityScore());
+        }
+    }
+
+    @Nested
+    @DisplayName("updatePreferences() — detailed ratings")
+    class UpdatePreferencesDetailed {
+
+        private Rating detailedAll(City city) {
+            return Rating.builder().id(1L).user(user).city(city).overallScore(5)
+                    .cultureRating(5).foodRating(4).nightlifeRating(3).natureRating(5)
+                    .safetyRating(4).costRating(2).beachRating(3).architectureRating(5).shoppingRating(2)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("updates every weight when all sub-ratings present")
+        void updatesAllWeights() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+
+            recommendationService.updatePreferences(user, detailedAll(c));
+
+            assertEquals(1, prefs.getCultureRatingCount());
+            assertEquals(1, prefs.getShoppingRatingCount());
+        }
+
+        @Test
+        @DisplayName("updates only the provided sub-ratings")
+        void updatesOnlyProvided() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            Rating r = Rating.builder().id(1L).user(user).city(c).overallScore(5).cultureRating(5).build();
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+
+            recommendationService.updatePreferences(user, r);
+
+            assertEquals(1, prefs.getCultureRatingCount());
+            assertEquals(0, prefs.getFoodRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when preferences are missing")
+        void noopWhenPrefsMissing() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.empty());
+
+            recommendationService.updatePreferences(user, detailedAll(c));
+
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when rating is not detailed")
+        void noopWhenNotDetailed() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            Rating quick = Rating.builder().id(1L).user(user).city(c).overallScore(5).build();
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+
+            recommendationService.updatePreferences(user, quick);
+
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+    }
+
+    @Nested
+    @DisplayName("updatePreferencesFromQuick()")
+    class UpdatePreferencesFromQuick {
+
+        private Rating quick(City city, Integer score) {
+            return Rating.builder().id(1L).user(user).city(city).overallScore(score).build();
+        }
+
+        @Test
+        @DisplayName("updates all weights for a positive quick rating")
+        void updatesForPositive() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+
+            recommendationService.updatePreferencesFromQuick(user, quick(c, 5));
+
+            assertEquals(1, prefs.getCultureRatingCount());
+            assertEquals(1, prefs.getShoppingRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when the rating is detailed")
+        void noopWhenDetailed() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            Rating r = Rating.builder().id(1L).user(user).city(c).overallScore(5).cultureRating(5).build();
+
+            recommendationService.updatePreferencesFromQuick(user, r);
+
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when the overall score is null")
+        void noopWhenScoreNull() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            recommendationService.updatePreferencesFromQuick(user, quick(c, null));
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when the score is below the positive threshold")
+        void noopWhenBelowThreshold() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            recommendationService.updatePreferencesFromQuick(user, quick(c, 3));
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when preferences are missing")
+        void noopWhenPrefsMissing() {
+            City c = buildCity("A", 0.9f, 0.8f, 0.3f, 0.7f, 0.2f, 0.6f, 0.4f, 0.5f, 0.1f);
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.empty());
+            recommendationService.updatePreferencesFromQuick(user, quick(c, 5));
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+
+        @Test
+        @DisplayName("no-op when the rated city is null")
+        void noopWhenCityNull() {
+            when(preferencesRepository.findByUserId(1L)).thenReturn(Optional.of(prefs));
+            recommendationService.updatePreferencesFromQuick(user, quick(null, 5));
+            assertEquals(0, prefs.getCultureRatingCount());
+        }
+    }
+
 }
